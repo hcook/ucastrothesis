@@ -29,10 +29,7 @@
 % Bibliography stuff:
 
 \newcommand{\newblock}{\par} % need this for some natbib internal bug
-\usepackage{natbib}
-\citestyle{aa}
-\bibliographystyle{yahapj}
-\setlength{\bibsep}{0ex} % single-space entries
+\bibliographystyle{abbrv}
 \def\bibpreamble{\addcontentsline{toc}{chapter}{Bibliography}} % get a good TOC entry
 
 
@@ -45,6 +42,14 @@
 \usepackage{mydeluxetable} % deluxetable customized to play well with ucthesis
 
 \usepackage{lmodern,microtype} % subtle typographic improvements and updated basic font
+
+\usepackage{epsfig}
+\usepackage{soul}
+\usepackage{booktabs}
+\usepackage{url}
+\usepackage{mdwlist}
+\def\code#1{{\tt #1}}
+\include{scala}
 
 \begin{document}
 \ssp % single spacing
@@ -64,7 +69,9 @@ My work is awesome. Give me a Ph.D.
 \null\vfil
 {\large
 \begin{center}
-I dedicate this dissertation to graduate students everywhere.
+Teachers: Steuben, Brogan, Skadron, Patterson, Asanovic
+Parents
+Michael
 \end{center}}
 \null\vfil
 \end{dedication}
@@ -78,7 +85,12 @@ I dedicate this dissertation to graduate students everywhere.
 %% \addcontentsline{toc}{chapter}{List of Code Examples}
 
 \begin{acknowledgements}
-Too bad nobody helped me.
+Collaborators: Gonina, Catanzaro, Khailany, Israelivtiz, Bachan, Bachrach, Williams, Tan, Kamil, Moreto
+Cosmic Cube: Bird, Beamer, Celio, Waterman, Izraelevitz
+Barchitects: Lee, Love, Schmidt, Twigg
+Grads: Hanna, Brown, Klues, Carson, Knight, 
+Roommates: Schaeffer, Chin, Love, 
+Grier, Thomas
 
 % Feel free to modify or remove this acknowledgment:
 This dissertation was typeset using the
@@ -89,5 +101,6 @@ This dissertation was typeset using the
 \end{frontmatter}
 
 \include{intro/intro}
+\include{parameters/parameters}
 \bibliography{thesis}{}
 \end{document}

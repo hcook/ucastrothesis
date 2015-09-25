@@ -280,7 +280,7 @@
 % The number of committee members, which affects both the
 % number of lines and the amount of space between lines
 % on the approval page.
-\def\@numberofmembers{4}
+\def\@numberofmembers{3}
 \def\@approvalspace{.75in}
 \def\numberofmembers#1{\gdef\@numberofmembers{#1}
 \ifnum \@numberofmembers > 3
