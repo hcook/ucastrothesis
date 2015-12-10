@@ -1,17 +1,18 @@
 \chapter{Introduction}
 \label{c.intro}
 
-The last decade has been a revolutionary one for computer architecture, and the next decade promises to be even more so.
+The last decade has been revolutionary for computer architecture, and the next decade promises to be even more so.
 While we have long had to adapt our design philosophies to account for changing physical constants,
 fundamental relationships between technology properties have begun to drift from their comfortable trends.
 We will no longer be able to rest on the twin laurels of Moore's Law and Dennard scaling to achieve the
-expontential increases in computational performance that our information society has grown to demand.
-Where process scaling has failed, architecture and design will have to make up the gap.
+expontential increases in computational performance that our information society has grown to depend upon.
+As process scaling fails to produce further returns, architecture and design will have to take its place.
 
 New design challenges call for the creation of new tools and the adoption of new methogologies.
 Best practices for the hardware design industry have been complacently static.
 In the meantime, software engineers have continued to push the boundaries of what is possible with the computers we have architected for their use.
-This thesis is an attempt to close the loop between the productivity of modern software tools and the design of future hardware architectures.
+
+This thesis is an attempt to apply the productivity of modern software tools to the design of future hardware architectures.
 In extending the capabilities of a new hardware description language, I hope to have brought the agility and composability of functional, object-oriented software design to one of the most difficult design tasks in the hardware domain,
 namely that of coherent hierarchies of on-chip caches.
 
@@ -24,13 +25,13 @@ In doing so, I hope to illustrate the role my thesis plays in bringing the latte
 
 As I began my tenure at Berkeley, the computer processor industry was pivoting to adopt multicore chip designs,
 in which multiple processors with a shared memory hierarchy are collated into a single chip.
-This change was not perceived as welcome: the difficulties in achieving improved software performance that strongly scales with core count are quite substantial \cite{Asanovic:EECS-2006-183}.
+This change was not perceived as welcome; the difficulties in achieving improved software performance that strongly scales with core count are substantial \cite{Asanovic:EECS-2006-183}.
 Over the preceding decade, the processor industry had been backed into the multicore corner by three fundamental bottlenecks:
-\begin{itemize}
-\item ILP Wall: There are diminishing returns on automatically extracting more Instruction-Level Parallelism from sequential programs \cite{hennessy2011computer}.
-\item Memory Wall: Memory latency improvement has been lagging memory bandwidth, and now even complex arithmetic operations are hundreds of times faster then loads and stores \cite{wulf1995hitting}.
-\item Power Wall: We can put more transistors on a chip than we can dissipate the heat of switching at high frequency \cite{shacham-micro10}.
-\end{itemize}
+\begin{description}
+\item[ILP Wall.] There are diminishing returns on automatically extracting more Instruction-Level Parallelism from sequential programs \cite{hennessy2011computer}.
+\item[Memory Wall.] Memory latency improvement has been lagging memory bandwidth, and now even complex arithmetic operations are hundreds of times faster then loads and stores \cite{wulf1995hitting}.
+\item[Power Wall.] We can put more transistors on a chip than we can dissipate the heat of switching at high frequency \cite{shacham-micro10}.
+\end{description}
 
 However, despite the ongoing dominance of multicore designs in the market, in the intervening years it has not proven to be pragmatic to for industry to exponentially increase core counts per chip alongside transistor counts.
 Amdahl's law ensures that communication costs will eventually dominate any parallel program, so the marginal energy cost of increasing performance with parallelism increases with the number of cores.
@@ -59,17 +60,17 @@ In July 2015, Intel announced that their next generation of processors will not 
 and that a third iteration on the design of the current processor generation would be used to fill in the gap.
 This scheduling change pushed the cadence of their technology node jumps out to nearly three years,
 and also broke the ``tick/tock'' model of design-change-or-technology-shrink per generation that the company had been holding fast to since 2007.
-While it may be too soon to declare Moore's Law impossible to resuscitate, it is worth noting that the proximal effect of the slowdown is for companies to increase the number of design iterations they cycle through at each technology node.
+The proximal effect of the slowdown is for Intel and other companies to increase the number of design iterations they cycle through at each technology node.
 In order to add value to the next product, companies will have to improve the design while working with the same number of transistor resources.
 
 Taken together, the rise of power constraints and limited transistor counts puts the emphasis of the computer processor industry back on chip design and architecture, rather than process technology scaling.
 
 \subsection{Designing for Energy Efficiency}
 
-In this brave new power-constrained, post-Dennard world, energy-efficiency becomes a first-order design goal.
+In this brave new power-constrained, post-Dennard world, energy efficiency becomes a first-order design goal.
 Power is the product of performance (operations per second) and energy per operation.
 Therefore, subject to power constraints, the only way in which hardware designers can continue to offer increasing performance is to lower energy per operation.
-Energy efficiency demands for high-performance computing and embedded computing have converged due to the former's hunger for maximal performance and the latter's fixation on battery life.
+Energy efficiency demands for high-performance computing and embedded computing have converged due to the former's hunger for maximal performance and the latter's dependence on battery life.
 
 Providing specialized hardware is a natural solution to reducing energy per operation while also playing nicely with the dark silicon paradigm \cite{esmaeilzadeh2011dark}.
 For a particular problem, some subset of the transistors can be used to arrive at a solution as efficiently as possible, while less suitable portions of the chip remain power-gated.
@@ -100,7 +101,7 @@ Task & Energy (pJ) \\ \hline
 \end{table}
 
 As is clear from these estimates, data movement energy costs far outweigh the computation's energy costs, even for simple reads of local register files.
-Transferring data across the entire chip is yet more expensive still.
+Transferring data across the entire chip is yet more expensive.
 The high cost associated with communication thereby increases the value of managing the memory hierarchy well.
 Ineffective heuristics for data placement and replication within the on-chip memory hierarchy can potentially waste a vast amount of energy relative to the base cost of the computation itself.
 
@@ -117,10 +118,10 @@ Modern multicore processors communicate by executing load and store instructions
 However, the cores also make use of hardware-managed caches to reduce the expected latency of these memory requests, as well as to filter outbound memory traffic.
 Generally these caches are organized into a tree, where the root is a large shared cache and the leaves are private caches co-located with each core.
 Because the levels of the memory hierarchy closest to the cores are private, hardware mechanisms must be provided by the chip designer to ensure that all caches agree on the value stored at each memory address at a given point in time.
-This agreement is what makes system {\em coherent}.
+This agreement is what makes the system {\em coherent}.
 
 In a system with hardware-managed cache coherence, the cache controllers and memory controllers
-communicate amongst themselves according to some protocol to maintain coherence.
+communicate among themselves according to some protocol to maintain coherence.
 While they might have vastly different implementations, 
 all such protocols maintain coherence by ensuring the same {\em single-writer, multiple-reader} (SWMR) invariant \cite{sorin2011primer}. 
 For a given block of cached memory, at any given moment in time, there is either: 
@@ -136,12 +137,13 @@ At the same time, hardware-management innately provides backwards compatibility 
 
 Despite its innate appeal, the future scalability of hardware-managed coherence has been a debated topic.
 As core counts continue to grow, some researchers fear forthcoming increases in coherence-related traffic, coherence metadata storage overhead, and the maintainance of inclusive caches will dominate the performance benefits of hardware-managed coherence \cite{choi2011denovo, kelm2011cohesion, howard201048}.
-Others have argued that backwards compatibility/legacy is too important and scalability challenges can be addressed \cite{martin2012chip}.
+Others have argued that backwards compatibility/legacy is too important to give up and that scalability challenges can be addressed \cite{martin2012chip}.
 
 The scalability issue is somewhat mitigated by the fact that industry has shied away from exponentially increasing core count per chip, and instead moved to focus on specialization and heterogenous cores.
 It seems probable that we will observe a continued inclusion of hardware-managed cache coherence, albeit possibly alongside software-managed solutions.
 As the energy consumed by data movement continues to grow relative to that required to perform computations, more design effort will be put into optimizations for purely hardware-based protocols,
 or into protocols that support optional software control of coherence for certain memory regions \cite{kelm2011cohesion}.
+
 In general, we will see protocols that have been extended in order to reduce the average energy consumed in transferring the data required by particular accelerators or application-specific co-processors to the proper place and in the ideal layout.
 This increase in complexity means that protocol design and verification will grow more both difficult and more important,
 which is unfortunate because correctly implementing cache coherence protocols is one of the hardest tasks in hardware design.
@@ -211,7 +213,7 @@ in general the broader the high-level language is, the more difficult it becomes
 The lack of direct control over the amount of hardware resources generated by the synthesis process also concerns some designers.
 
 As described later in this thesis, we have pursued a syncretic language approach that allows for collections of components to be built up into reusable libraries, while also providing a substrate upon which HLS tools can be built.
-By leveraging first order support for object-orientation and metaprogramming, 
+By leveraging first-order language support for object-orientation and metaprogramming, 
 our goal is to allow developers to write design generators rather than individual instances of designs,
 which in turn will encourage them to develop families of customizable designs in new ways.
 By embedding implicit microarchitectural and domain knowledge along with explicit evaluation data in the generators we construct, we can iteratively create different chip instances customized for particular design goals or constraints \cite{shacham-micro10}.
@@ -220,6 +222,17 @@ support for reconfiguring individual components based on the context in which th
 our new language also improves on the limited module parameterization facilities of traditional HDLs.
 
 \subsection{The role of the development model}
+
+\begin{figure}[t!]
+\centering
+\includegraphics[width=1\columnwidth]{intro/figures/agile.pdf}
+\caption{
+A. The waterfall model steps all features through each activity sequentially.
+B. The agile modle pushes each feature through all activities in parallel.
+C. As we validate many features in parallel we push them through lengthier yet more accurate evaluation methodologies.
+}
+\label{fig:agile}
+\end{figure}
 
 Traditionally, both software and hardware have been developed as a sequential process that consists of distinct phases:
 requirements analysis and specification,
@@ -231,22 +244,40 @@ This process is the called the Waterfall development model, since it flows inexo
 Once a step has been completed, developers cannot return to a previous one without scrapping the whole project and beginning anew.
 The Waterfall model relies on extensive documentation, meiticulous record keeping, and fixed client requirements.
 
-The frequentcy of over-budget, late and abandoned software projects led to a revolution in software development, demarcated by the Agile Manifesto in 2001 \cite{agile}.
+The frequentcy of over-budget, late, and abandoned software projects led to a revolution in software development, demarcated by the Agile Manifesto in 2001 \cite{agile}.
 Agile development methodology emphasizes interpersonal interactions over processes, working software over comprehensive documentation, and responding to change over following a plan.
-What this means in practice is that small teams work to refine a set of working-but-incomplete prototypes iteratively until the customer is happy with the result.
+Given a fixed time and cost, an agile team will create feature estimates, whereas a waterfall-based team will use a fixed plan to create time and cost estimates. 
+In practice, the agile approach leads to small teams refining a set of working-but-incomplete prototypes iteratively until the end result is acceptable.
 Decisions about what design elements to change in each future iteration depend on an evaluation of the previous one.
 Rewrites and changes to requirements are to be expected, and in fact are forged into a competitive advantage for the client.
 
-Conventional wisdom holds that the frequent deliverable prototypes required by agile methodology are incompatible with hardware development, but our research group has not found this to be the case \cite{patterson-eetimes}.
+Figure~\ref{fig:agile} illustrates the agile development model in contrast to the waterfall model.
+In our agile methodology, we first push a trivial prototype with a minimal working feature set all the way through the toolflow.
+Then we begin adding features to it iteratively.  After spec'ing out a particular feature and implementing it, 
+we then deploy it against an increasing series of more complex tests on more heavyweight evaluation platforms, up to and including taping out prototype chips.
+Emphasizing a sequence of prototypes reduces verification simulation effort since early hardware prototypes run orders of magnitude faster than simulators. 
+
+While there are some benefits in terms of verification (``are we building the thing right''), 
+where the agile model really shines is validation (``are building the right thing''),
+in that we are more likely to meet energy-performance expectations using the iterative agile process.
+Figure~\ref{fig:agile}.C illustrates how we use the agile model to improve validation.
+The circumfrence of each circle represents the relative time it takes to validate the design using a particular technology to achieve an ever increasing level of confidence.
+While the latency and cost of these validation efforts go up, at the same time our confidence in verification and validation of the set of new features go up too.
+Iterating in parallel at different levels of abstraction is the key to our productivity gains.
+Feedback from previous iterations is used to drive the set of features emphasized in the next round of development.
+
+Conventional wisdom holds that the frequent deliverable prototypes required by agile methodology are incompatible with hardware development, but our research group has not found this to be the case \cite{lee-micro15}.
 While mask costs for modern designs are on the order of multiples of millions of dollars depending on process technology \cite{sperling}, 
 organizations like MOSIS continue to offer multi-project wafers, where many independent projects are put on the same reticle, to help amortize these mask costs.
-By reducing the minimal die size to 1.57x1.57 mm we were able to bring the total cost of our prototype chips down to \$30,000,
-and produced eight chips in two design families over the course of just four years with a small team of graduate students.
+By reducing the minimal die size to around 1.5x1.5 mm we were able to bring the total cost of our prototype chips down to \$30,000,
+and produced eleven chips over the course of just four years with a small team of graduate students.
+It is worth noting that three distinct families of chips were produced in an interleaved fashion, {\em all from the same source code base}, but specialized differently to try out distinct research ideas
+(see Figure~\ref{fig:tapeouts}).
 As Moore's Law continues to slow down, industry will spend more time on each process technology node, leading to further reductions in the cost of doing multiple design iterations at a given node.
 
 While the four-month latency inherent to the fabrication and evaluation of test chips may seem ponderous to agile software developers,
 it still allows for three to ten times as many iterations compared to the traditional  multi-year turnaround of large chip designs flowed painstakingly through the waterfall model.
-By supplementing the actual external test chip tapeouts with internal evaluations of further prototypical iterations, we can further improve our team's iteration latency.
+By supplementing the actual external test chip tapeouts with internal evaluations of further prototypical iterations, we can further reduce our team's iteration latency.
 This approach also encourages reuse of a shared software stack and verification framework, further amortizing costs.
 
 Adopting the agile methodology dovetails nicely with our emphasis on building chip generators over particular chip design instances.
@@ -254,6 +285,23 @@ As we add features to the generator, we can retarget our efforts to adapt to per
 By parameterizing the design, we can scale it from test chip sizes to final product without rewriting any modules.
 As we will see, even a design choice as complicated and pervasive as a multi-level cache coherence protocol can be made a tuneable design parameter when properly factored out from the rest of the design.
 By providing support for generating a family of protocols rather than one single protocol, my thesis has enabled us to iterate on protocol design as we scale up the size of the memory hierarchy across chip iterations.
+
+\begin{figure}[t!]
+\centering
+\vspace{-0.15in}
+\includegraphics[width=\columnwidth]{intro/figures/tapeouts.pdf}
+\vspace{-0.3in}
+\caption{Lineage of UC Berkeley Chip Tape-Outs during the completion of my thesis.
+The 28nm Raven chips combines a 64-bit RISC-V vector microprocessor with on-chip switched-capacitor DC-DC converters and adaptive clocking ~\cite{zimmer2015raven}.
+The 45nm EOS chips integrate a 64-bit dual-core RISC-V vector processor with monolithically-integrated silicon photonic links ~\cite{lee2014eos}.
+In total, we have taped out
+four Raven chips on STMicroelectronics' 28nm FD-SOI process,
+six EOS chips on IBM's 45nm SOI process,
+and one SWERVE chip on TSMC's 28nm process. 
+}
+\label{fig:tapeouts}
+\vspace{-0.1in}
+\end{figure}
 
 \subsection{Chisel}
 
@@ -273,7 +321,7 @@ When combined with multiple backends catering to different stages of the verific
 
 Beyond implementing the Chisel compiler and releasing it as an open source software tool, my research group has worked to understand what types of hardware designs tasks can be encapsulated within resuable libraries that extend Chisel's functionality.
 In some cases, these libraries have taken the form of discrete modules or parameterized functional units.
-In other cases, the correct abstraction takes the form of a compiler pass, higher-order-functional API, or even a self-contained mini-DSL.
+In other cases, the correct abstraction takes the form of a compiler pass, higher-order-functional API, or even a self-contained mini-DSEL.
 Additionally, we have developed some pure Scala software utilities that aid in the hardware design process.
 In the next section I discuss the specific contributions my thesis makes to the Chisel ecosystem to aid in the design of cache coherent memory hierarchies.
 
@@ -296,10 +344,9 @@ This work would not have been possible without a variety of fruitful collaborati
 
 Jonathan Bachrach, Huy Vo, and Andrew Waterman were my primary collaborators in developing the common utilities made available as part of the Chisel core distribution.
 Jonathan's vision for what Chisel had the potential to become has been borne out in this thesis and all the chips taped out at Berkeley during my time here.
-John Bachan and Adam Izraelevitz were instrumental in the developement of the context-dependent parameterization library. 
+John Bachan and Adam Izraelevitz were instrumental in the developement of the context-dependent environment parameterization library. 
 Many other members of the Berkeley Architecture Research group also contributed to Chisel development and features. 
 
 Andrew Waterman and Yunsup Lee entrusted me with the design and implementation of the memory heirarchy for multiple generations of the Raven and EOS lineages of test chips.
 Working with them gave me a context and focus that forced me to search for both more productive abstractions and more efficient implementations.
-I would also like to thank our other collaborators at the Berkeley Wireless Research Center.
-
+I would also like to thank our other tape-out collaborators at the Berkeley Wireless Research Center and MIT.
