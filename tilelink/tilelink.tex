@@ -3,6 +3,7 @@
 
 TileLink is a protocol designed to be a substrate for cache coherence transactions implementing a particular cache coherence policy within an on-chip memory hierarchy.
 Its purpose is to orthogonalize the design of the on-chip network and the implementation of the cache controllers from the design of the coherence protocol itself.
+
 Any cache coherence protocol that conforms to TileLink's transaction structure can be used interchangeably with the physical networks and cache controllers we provide.
 
 TileLink is roughly analogous to the data link layer in the IP network protocol stack, but exposes some details of the physical link necessary for efficient controller implementation.
@@ -10,30 +11,60 @@ It also codifies some transaction types that are common to all protocols, partic
 
 \section{Background}
 
+Transactional approach to coherence.
+
 Shape of coherence transactions.
 
 Client/Manager Architecture.
-
 
 \section{Architecture}
 \label{s.arch}
 
 TileLink assumes a Client/Manager architecture.
+Hierarchical.
+
 Consists of agents and channels.
+
+Four hop protocol.
+
+What it is/is not for. 
+
+TileLink tries to impose as few constraints as possible on the implementation of both the agents' controllers and the underlying physical network.
+This design emphasis somewhat increases protocol complexity, but makes TileLink compatible with a wide variety of physical design constraints and application domains.
+With regards to agents, TileLink does not make assumptions about what state the agents are capable of storing about each cache block (though it does require agents without state to operate in particular, conservative ways).
+With regards to the underlying physical network, TileLink does not assume that messages are delivered in order between two particular endpoints (though it does require an extra transaction step if they are not ordered point-to-point).
+The ramifications of these design decisions are discussed in more detail in the following sections.
 
 \subsection{Agents}
 
-Agents participating in the coherence protocol are either:
+Agents participating in the TileLink protocol are either:
 \begin{description}
-\item[clients] requesting access to cache blocks, or
-\item[managers] overseeing the propagation of cache block permissions and data
+\item[Clients] that request access to cache blocks, or
+\item[Managers] that oversee the propagation of cache block permissions and data.
 \end{description}
 
-A client may be a cache, a DMA engine, or any other component that would like to participate in the coherent memory domain, regardless of whether or not it actually keeps a copy of the data locally.
+A client may be a cache, a DMA engine, an accelerator, or any other component that would like to participate in performing memory operations that target the coherent abstraction of global shared memory.
+Even clients that do not actually cache a copy of the data within themselves may use TileLink in order to see a coherent view of memory with respect to other clients that do have caches
+(i.e. to see dirtied data currently stored in those clients).
+Clients are responsible for initiating transactions to gain or cede permissions on copies of cache blocks, and also for reporting on whether they possess certain permissions on those blocks.
 
-A manager may be an outer-level cache controller, a directory, or a broadcast medium such as a bus. 
+A manager may be an outer-level cache controller, a directory, or a broadcast medium such as a bus.
+Managers may or may not posses a local copy of a data block themselves, but they must know how to supply data in response to clients' requests.
+In addition to supplying data, managers are responsible for tracking which clients have been granted which permissions on a data block,
+and for probing those clients in order to ensure that the 
+single-writer, multiple-reader (SWMR) invariant \cite{sorin2011primer} is upheld.
+If a manager does not track the specific condition of individual blocks, it must be pessimistic
+in terms of the quantity and type of probe messages that it sends.
+A manager also provides a point of serialization for coherence transactions
+initiated by any of the clients within its domain.
 
-In a multi-level memory hierarchy, a particular cache controller can function as both a client (wrt. caches further out in the hierarchy) and a manager (wrt. caches closer to the processors).
+In a multi-level memory hierarchy, a particular agent can function as both
+a client (with respect to caches further out in the hierarchy)
+and a manager (with respect to caches closer in to the processors).
+Such an agent is termed {\em hierarchical}.
+These agents must perform a translation of the various message types between the inner and outer protocol.
+This translation process is described in more detail in Chapter~\ref{c.coh}.
+Hierarchical agents may or may not store a copy of the data locally, but they must at least track a set of ongoing transactions and serve as a serialization point for the inner protocol.
 
 \subsection{Channels}
 
@@ -57,7 +88,8 @@ Preventing messages of a lower priority from blocking messages of a higher prior
 
 \subsection{Transaction Flows}
 
-There are two types of transaction that can occur on a cache block managed by TileLink. The first type enables clients to acquire a cache block:
+There are two types of transaction that can occur on a cache block managed by TileLink.
+The first type enables clients to acquire permissions on a cache block:
 \begin{itemize}
 \item A client sends an Acquire to a manager.
 \item The manager sends any necessary Probes to clients.
@@ -66,6 +98,8 @@ There are two types of transaction that can occur on a cache block managed by Ti
 \item Having obtained the required data or permissions, the manager responds to the original requestor with a Grant.
 \item Upon receiving a Grant, the original client responds to the manager with a Finish to complete the transaction.
 \end{itemize}
+After this transaction has completed, the client has acquired permissions to either read or write the cache block, as well as copy of the block's data.
+If the manager is capable of tracking which
 
 The second type of transaction is supports clients voluntarily releasing a cache block:
 \begin{itemize}
@@ -73,6 +107,8 @@ The second type of transaction is supports clients voluntarily releasing a cache
 \item The manager communicates with backing memory if required.
 \item The manager acknowledges completion of the transaction using a Grant.
 \end{itemize}
+
+
 
 \subsection{Concurrency}
 
@@ -170,12 +206,30 @@ Channels with data may send the data over multiple beats; the width of the under
 Initiates a transaction to acquire access to a cache block with proper permissions.
 Also used to write data without caching it (acquiring permissions for the write as it does so).
 
+PutDataBlock messages may contains multiple beats of data (if the cache block size is larger than TLDataBits).
+The client controller that generates this message is responsible for generating multiple sequential Release messages and incrementing the addr\_beat field as it does so.
+
 \begin{table}[ht]
 \begin{center}
 \begin{tabular}{|l|l|l|}
     \hline
-    X&X&X\\
-    \hline
+    Name & Type & Purpose \\ \hline \hline
+addr\_block & UInt & Physical address of the cache block, with block offset removed \\ \hline
+client\_xact\_id & UInt & Client's id for the transaction \\ \hline
+data & UInt & Client-sent data, used for Put transactions \\ \hline
+addr\_beat & UInt & Offset of this beat's worth of data within the cache block \\ \hline
+built\_in\_type & Bool & Whether the transaction is a built-in or custom type \\ \hline
+a\_type & UInt & Type of the transaction. For built-in transactions, one of: \\
+        &      & \{Get, GetBlock, GetPrefetch, Put, PutBlock, PutPrefetch, PutAtomic\}. \\
+        &      &  Otherwise defined by the coherence protocol. \\ \hline
+union & Union & Used to derive the following subfields: \\ \hline \hline
+allocate & Bool & R/W: Hints whether to allocate data in outer caches \\
+         &      & when servicing this request \\ \hline
+op\_code & UInt & Memory op code (Read, Write, or AMO ALU op) \\ \hline
+op\_size & UInt & A: Size of the AMO operands (Byte, Half, Word, Double) \\ \hline
+addr\_byte & UInt & A: Address of the AMO operands within the block \\ \hline
+amo\_shift\_bits & UInt & A: Number of bits to shift block to extract AMO operands \\ \hline
+wmask & UInt & W: Byte write mask for Write op's data \\ \hline
 \end{tabular}
 \end{center}
 \caption{Fields of the Acquire channel.}
@@ -190,8 +244,9 @@ Queries an agent to determine whether it has a cache block or revoke its permiss
 \begin{center}
 \begin{tabular}{|l|l|l|}
     \hline
-    X&X&X\\
-    \hline
+    Name & Type & Purpose \\ \hline \hline
+addr\_block & UInt & Physical address of the cache block, with block offset removed \\ \hline
+p\_type & UInt & Transaction type, defined by coherence protocol \\ \hline
 \end{tabular}
 \end{center}
 \caption{Fields of the Probe channel.}
@@ -204,7 +259,6 @@ Queries an agent to determine whether it has a cache block or revoke its permiss
 Acknowledgement of probe receipt, releasing permissions on the line along with any dirty data.
 Also used to voluntarily write back data or cede permissions on the block.
 
-
 Release messages may contains multiple beats of data (if the cache block size is larger than TLDataBits).
 The client controller that generates this message is responsible for generating multiple sequential Release messages and incrementing the addr\_beat field as it does so.
 
@@ -212,8 +266,13 @@ The client controller that generates this message is responsible for generating 
 \begin{center}
 \begin{tabular}{|l|l|l|}
     \hline
-    X&X&X\\
-    \hline
+    Name & Type & Purpose \\ \hline \hline
+addr\_block & UInt & Physical address of the cache block, with block offset removed \\ \hline
+client\_xact\_id & UInt & Client's id for the transaction \\ \hline
+data & UInt & Used to writeback dirty data \\ \hline
+addr\_beat & UInt & Offset of this beat's worth of data within the cache block \\ \hline
+r\_type & UInt & Transaction type, defined by coherence protocol \\ \hline
+voluntary & Bool & Whether this release is voluntary or in response to a Probe \\ \hline
 \end{tabular}
 \end{center}
 \caption{Fields of the Release channel.}
@@ -224,32 +283,101 @@ The client controller that generates this message is responsible for generating 
 
 Provides data or permissions to the original requester granting, access to the cache block. Also used to acknowledge voluntary Releases.
 
+The GetDataBlock message may contains multiple beats of data (if the cache block size is larger than TLDataBits).
+The manager controller that generates this message is responsible for generating multiple sequential GetDataBlockmessages and incrementing the addr\_beat field as it does so.
+
 \begin{table}[ht]
 \begin{center}
 \begin{tabular}{|l|l|l|}
     \hline
-    X&X&X\\
-    \hline
+    Name & Type & Purpose \\ \hline \hline
+built\_in\_type & Bool & Whether transaction type is built-in or custom \\ \hline
+g\_type & UInt & Type of the transaction. For built-in transactions, one of: \\
+        &      & \{VoluntaryAck, PrefetchAck, PutAck, GetDataBeat, GetDataBlock\}. \\
+        &      & Otherwise defined by the coherence protocol \\ \hline
+client\_xact\_id & UInt & Client's id for the transaction \\ \hline
+manager\_xact\_id & UInt & Manager's id for the transaction, passed to Finish \\ \hline
+data & UInt & Used to supply data to original requestor \\ \hline
+addr\_beat & UInt & Offset of this beat's worth of data within the cache block \\ \hline
 \end{tabular}
 \end{center}
 \caption{Fields of the Grant channel.}
 \label{tab:grant}
 \end{table}
 
-The GetDataBlock message may contains multiple beats of data (if the cache block size is larger than TLDataBits).
-The manager controller that generates this message is responsible for generating multiple sequential GetDataBlockmessages and incrementing the addr\_beat field as it does so.
 
 \subsection{Finish}
+
+Final acknowledgement of transaction completion from requestor, used for transaction ordering.
 
 \begin{table}[ht]
 \begin{center}
 \begin{tabular}{|l|l|l|}
     \hline
-    X&X&X\\
-    \hline
+    Name & Type & Purpose \\ \hline \hline
+manager\_xact\_id & UInt & Manager's id for the transaction \\ \hline
 \end{tabular}
 \end{center}
 \caption{Fields of the Finish channel.}
 \label{tab:finish}
 \end{table}
 
+\section{Agent-Specific Views of TileLink}
+
+\begin{figure}[t!]
+\centering
+\includegraphics[width=1\columnwidth]{tilelink/figures/agent-specific.pdf}
+\caption{Overview of the logic view of the TileLink interface presented to each type of agent.}
+\label{fig:agent}
+\end{figure}
+
+For the convenience of designers implementing Client and Manager agents, we provide TileLinkNetworkPort modules which abstract away the details of the on-chip network implementation.
+These network ports automatically generate networking headers, perform SerDes for narrower physical network channels, and generate appropriate control flow logic.
+The ports then expose simplified subsets of the TileLink channels to the agent modules.
+Figure~\ref{fig:agent} provides an overview of these two interfaces.
+
+ClientTileLinkIO consists of standard Acquire, Probe, Release, and Grant message channels.
+It does not include the Finish channel as generating those acknowledgements is handled by the ClientTileLinkNetworkPort.
+
+ManagerTileLinkIO consists of Acquire, Probe, Release, and Grant message channels that have additional data appended about the source or destination of messages, expressed in terms of the Client's id.
+It does include a Finish channel so that the manager knows when to register the transaction as complete.
+
+\section{TileLink Parameters}
+
+This section defines the parameters that are exposed by the TileLink to the top-level design.
+All agents that implement TileLink should either work for all values of these parameters within the specified ranges, or should add Chisel.Constraints to the design to define functional limits on hem.
+
+\begin{table}[ht]
+\begin{center}
+\begin{tabular}{|l|l|l|}
+    \hline
+Name & Type & Function \\ \hline \hline
+TLId & String & Ids a TileLink in a multi-level hierarchy \\ \hline
+TLCoherencePolicy & CoherencePolicy & Coherency policy used on this TileLink \\ \hline
+TLNManagers & Int & Number of manager agents \\ \hline
+TLNClients & Int & Number of client agents \\ \hline
+TLNCachingClients & Int & Number of client agents that cache data \\ \hline
+TLNCachelessClients & Int & Number of client agents that do not cache data \\ \hline
+TLMaxClientXacts & Int & Max number of concurrent transactions per client \\ \hline
+TLMaxClientsPerPort & Int & Max number of clients sharing a single network port \\ \hline
+TLMaxManagerXacts & Int & Max number of concurrent transactions per manager \\ \hline
+TLBlockAddrBits & Int & Address size \\ \hline
+TLDataBits & Int & Amount of block data sent per beat, must be > 64b \\ \hline
+TLDataBeats & Int & Number of beats per cache block \\ \hline
+TLNetworkIsOrderedP2P & Boolean & Whether the underlying physical network \\
+                      &         & preserved point-to-point ordering of messages \\ \hline
+\end{tabular}
+\end{center}
+\caption{Fields of the Finish channel.}
+\label{tab:finish}
+\end{table}
+
+\section{Discussion}
+
+Bandwidth
+
+Extensibility
+
+Conversion to AXI and RapidIO
+
+Future work
