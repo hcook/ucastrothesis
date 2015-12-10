@@ -1,0 +1,255 @@
+\chapter{TileLink: A Substrate Protocol for Coherence Policy Transactions }
+\label{c.tilelink}
+
+TileLink is a protocol designed to be a substrate for cache coherence transactions implementing a particular cache coherence policy within an on-chip memory hierarchy.
+Its purpose is to orthogonalize the design of the on-chip network and the implementation of the cache controllers from the design of the coherence protocol itself.
+Any cache coherence protocol that conforms to TileLink's transaction structure can be used interchangeably with the physical networks and cache controllers we provide.
+
+TileLink is roughly analogous to the data link layer in the IP network protocol stack, but exposes some details of the physical link necessary for efficient controller implementation.
+It also codifies some transaction types that are common to all protocols, particularly the transactions servicing memory accesses made by agents that do not themselves have caches with coherence policy metadata.
+
+\section{Background}
+
+Shape of coherence transactions.
+
+Client/Manager Architecture.
+
+
+\section{Architecture}
+\label{s.arch}
+
+TileLink assumes a Client/Manager architecture.
+Consists of agents and channels.
+
+\subsection{Agents}
+
+Agents participating in the coherence protocol are either:
+\begin{description}
+\item[clients] requesting access to cache blocks, or
+\item[managers] overseeing the propagation of cache block permissions and data
+\end{description}
+
+A client may be a cache, a DMA engine, or any other component that would like to participate in the coherent memory domain, regardless of whether or not it actually keeps a copy of the data locally.
+
+A manager may be an outer-level cache controller, a directory, or a broadcast medium such as a bus. 
+
+In a multi-level memory hierarchy, a particular cache controller can function as both a client (wrt. caches further out in the hierarchy) and a manager (wrt. caches closer to the processors).
+
+\subsection{Channels}
+
+TileLink defines five independent transaction channels.
+These channels may be multiplexed over the same physical link, but to avoid deadlock TileLink specifies a priority amongst the channels that must be strictly enforced.
+Channels may contain both metadata and data components.
+
+The channels are:
+\begin{description}
+\item[Acquire.] Initiates a transaction to acquire access to a cache block with proper permissions. Also used to write data without caching it.
+\item[Probe.] Queries a client to determine whether it has a cache block or revoke its permissions on that cache block.
+\item[Release.] Acknowledgement of probe receipt, releasing permissions on the line along with any dirty data. Also used to voluntarily write back data.
+\item[Grant.] Provides data or permissions to the original requestor granting, access to the cache block. Also used to acknowledge voluntary Releases.
+\item[Finish.] Final acknowledgement of transaction completion from requestor, used for transaction ordering.
+\end{description}
+
+At present time, all channels are routed from clients to managers or from managers to clients. (In the future, client-to-client Grants may be added.)
+
+The prioritization of channels is Finish >> Grant >> Release >> Probe >> Acquire.
+Preventing messages of a lower priority from blocking messages of a higher priority from being sent or received is necessary to avoid deadlock.
+
+\subsection{Transaction Flows}
+
+There are two types of transaction that can occur on a cache block managed by TileLink. The first type enables clients to acquire a cache block:
+\begin{itemize}
+\item A client sends an Acquire to a manager.
+\item The manager sends any necessary Probes to clients.
+\item The manager waits to receive a Release for every Probe that was sent.
+\item The manager communicates with backing memory if required.
+\item Having obtained the required data or permissions, the manager responds to the original requestor with a Grant.
+\item Upon receiving a Grant, the original client responds to the manager with a Finish to complete the transaction.
+\end{itemize}
+
+The second type of transaction is supports clients voluntarily releasing a cache block:
+\begin{itemize}
+\item A client sends a Release to a manager, specifying that it is voluntary.
+\item The manager communicates with backing memory if required.
+\item The manager acknowledges completion of the transaction using a Grant.
+\end{itemize}
+
+\subsection{Concurrency}
+
+TileLink does not make any assumptions about the ordering of messages sent point-to-point over particular channels.
+Therefore, concurrency must be managed by agents at several points in the system.
+\begin{itemize}
+\item A manager should not accept a request for a transaction on a block that is already in-flight for a different client (unless it knows how to merge the two transactions as discussed below). Specifically, the manager must wait until it has received a Finish from the original client in order to ensure proper ordering of any future Grants.
+\item If client has an outstanding voluntary writeback transaction, it cannot respond to an incoming Probe request on that block with Releases until it receives a Grant from the manager acknowledging completion of the writeback.
+\end{itemize}
+
+Transactions can be merged in certain situations. 
+
+One specific situation that must be handled by all manager agents is receiving a voluntary Release for a block which another client is currently attempting to Acquire.
+The manager must accept the voluntary Release as well as any Releases resulting from Probe messages, and provide Grant messages to both clients before the transaction can be considered complete.
+
+When running on networks that provide guaranteed ordering of messages between any client/manager pair, the Finish acknowledgment of a Grant (and the Grant acknowledgement of a voluntary Release) can be omitted.
+
+\subsection{Metadata, Data, and Control Signals}
+
+Every channel is wrapped in the Chisel.DecoupledIO interface, meaning that each contains ready and valid signals as well as the following signals.
+
+Channels with data may send the data over multiple beats; the width of the underlying network is exposed to improve the efficiency of refilling data into caches whose data array rows are of a matching size.
+The client controller that generates this message is responsible for generating multiple sequential messages and incrementing the addr\_beat field as it does so.
+
+\section{Built-in Transactions}
+
+There are seven built-in types of Acquire that are available to all clients that want to participate in the coherence protocol, even if they themselves will not keep cached copies of the data.
+Because these transactions do not create a new private copy of the targeted cache block, they are termed ``uncached'' transactions. 
+However, they still participate in the standard TileLink transaction flow, meaning that they will result in probes of other caches and return coherence answers.
+
+The available uncached transactions are as follows:
+\begin{description}
+\item[Get.] Fetches a single beat of data from a cache block and returns only that beat
+\item[GetBlock.] Fetches an entire cache block and serves it back to the requestor.
+\item[GetPrefetch.]  Prefetches a cache block into the next-outermost level of the memory hierarchy with read permissions
+\item[Put.] Writes up to a beat's worth of data to backing memory. Uses a write mask to determine which bytes contain valid write data
+\item[PutBlock.] Writes out an entire cache block to backing memory
+\item[PutPrefetch.]  Prefetches a cache block into the next-outermost level of the memory hierarchy with write permissions
+\item[PutAtomic.] Performs an atomic memory op in the next-outermost level of the memory hierarchy. The maximum available operand size is 64b (sizes and opcodes per RISC-V atomic instructions).
+\end{description}
+
+The PutBlock message is unique among the built-in Acquires in that may contains multiple beats of data (if the cache block size is larger than TLDataBits).
+The client controller that generates this message is responsible for generating multiple sequential PutBlock messages and incrementing the addr\_beat field as it does so.
+
+There are five built-in types of Grant that are available to all managers that want to participate in the coherence protocol.
+Because ``uncached'' transactions do not create a new private copy of the targeted cache block, we use these Grant types mostly as acknowledgements.
+The available types are as follows:
+\begin{description}
+\item[GetDataBlock.] Full cache block in response to Acquire.GetBlock,
+\item[GetDataBeat.] Single beat of data in response to Acquire.Get or Acquire.PutAtomic,
+\item[PutAck.] Acknowledgement of Acquire.\{Put, PutBlock\}.
+\item[PrefetchAck.] Acknowledgment of Acquire.\{GetPrefetch, PutPrefetch\}.
+\item[VoluntaryAck.] Acknowledgement of any voluntary Release.
+\end{description}
+
+The GetDataBlock message may contains multiple beats of data (if the cache block size is larger than TLDataBits).
+The manager controller that generates this message is responsible for generating multiple sequential GetDataBlockmessages and incrementing the addr\_beat field as it does so.
+
+\begin{table}[ht]
+\begin{center}
+\begin{tabular}{|l|l|l|}
+    \hline
+    Acquire & Grant & Effect \\ \hline \hline
+    Get & GetDataBeat & Copy data in to client \\ \hline
+    GetBlock & GetDataBlock & Copy data in to client \\ \hline
+    GetPrefetch & PrefetchAck & Fetch data to outer memory with read permissions \\ \hline
+    Put & PutAck & Update data in outer memory \\ \hline
+    PutBlock & PutAck & Update data in outer memory \\ \hline
+    PutPrefetch & PrefetchAck & Fetch data to outer memory with write permissions \\ \hline
+    PutAtomic & GetDataBeat & Update data in outer memory and return old value. \\ \hline
+\end{tabular}
+\end{center}
+\caption{Overview of built-in, uncached transactions.}
+\label{tab:uncached}
+\end{table}
+
+Table~\ref{tab:uncached} provides and overview of the built-in transactions and their effect on memory.
+ 
+\subsection{Memory Model}
+
+Weak memory consistency.
+
+Client is in charge of not issuing multiple writes to individual addresses over un-ordered physical links.
+
+\section{Channel Signal Descriptions}
+
+This section details the specific signals contained in each channel of the TileLink protocol.
+
+Every channel is wrapped in the Chisel.DecoupledIO interface, meaning that each contains ready and valid signals as well as the following signals.
+
+Channels with data may send the data over multiple beats; the width of the underlying network is exposed to improve the efficiency of refilling data into caches whose data array rows are of a matching size.
+
+\subsection{Acquire}
+
+Initiates a transaction to acquire access to a cache block with proper permissions.
+Also used to write data without caching it (acquiring permissions for the write as it does so).
+
+\begin{table}[ht]
+\begin{center}
+\begin{tabular}{|l|l|l|}
+    \hline
+    X&X&X\\
+    \hline
+\end{tabular}
+\end{center}
+\caption{Fields of the Acquire channel.}
+\label{tab:acquire}
+\end{table}
+
+\subsection{Probe}
+
+Queries an agent to determine whether it has a cache block or revoke its permissions on that cache block.
+
+\begin{table}[ht]
+\begin{center}
+\begin{tabular}{|l|l|l|}
+    \hline
+    X&X&X\\
+    \hline
+\end{tabular}
+\end{center}
+\caption{Fields of the Probe channel.}
+\label{tab:probe}
+\end{table}
+
+
+\subsection{Release}
+
+Acknowledgement of probe receipt, releasing permissions on the line along with any dirty data.
+Also used to voluntarily write back data or cede permissions on the block.
+
+
+Release messages may contains multiple beats of data (if the cache block size is larger than TLDataBits).
+The client controller that generates this message is responsible for generating multiple sequential Release messages and incrementing the addr\_beat field as it does so.
+
+\begin{table}[ht]
+\begin{center}
+\begin{tabular}{|l|l|l|}
+    \hline
+    X&X&X\\
+    \hline
+\end{tabular}
+\end{center}
+\caption{Fields of the Release channel.}
+\label{tab:release}
+\end{table}
+
+\subsection{Grant}
+
+Provides data or permissions to the original requester granting, access to the cache block. Also used to acknowledge voluntary Releases.
+
+\begin{table}[ht]
+\begin{center}
+\begin{tabular}{|l|l|l|}
+    \hline
+    X&X&X\\
+    \hline
+\end{tabular}
+\end{center}
+\caption{Fields of the Grant channel.}
+\label{tab:grant}
+\end{table}
+
+The GetDataBlock message may contains multiple beats of data (if the cache block size is larger than TLDataBits).
+The manager controller that generates this message is responsible for generating multiple sequential GetDataBlockmessages and incrementing the addr\_beat field as it does so.
+
+\subsection{Finish}
+
+\begin{table}[ht]
+\begin{center}
+\begin{tabular}{|l|l|l|}
+    \hline
+    X&X&X\\
+    \hline
+\end{tabular}
+\end{center}
+\caption{Fields of the Finish channel.}
+\label{tab:finish}
+\end{table}
+

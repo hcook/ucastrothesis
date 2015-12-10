@@ -9,18 +9,20 @@ default: mthesis.pdf # default target if you just type "make"
 # included to show how you can process data as you compile your thesis
 # using standard GNU make constructs.
 
-deps += intro/intro.tex intro/processed.tex
-cleans += intro/intro.aux intro/processed.tex
+deps += intro/intro.tex
+cleans += intro/intro.aux
 
-intro/processed.tex: intro/sample.tex
-	sed -e s/terrible/wonderful/ $< >$@
+#intro/processed.tex: intro/sample.tex
+#	sed -e s/terrible/wonderful/ $< >$@
 
 
 # Chapter Two
+deps += parameters/parameters.tex
+cleans += parameters/parameters.aux
 
-## deps += ...
-## cleans += ...
-## etc
+# Chapter Three
+deps += tilelink/tilelink.tex
+cleans += tilelink/tilelink.aux
 
 
 # The thesis itself. We move the PDF to a new filename so that viewers
