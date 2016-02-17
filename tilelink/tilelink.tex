@@ -706,8 +706,18 @@ TODO: Multiple clients or managers on a port.
 
 This section defines a set of parameters that are exposed by the TileLink to the top-level design.
 Table~\ref{tab:tlparams} provides an overview of the available parameters.
+The majority are used to determine the widths of the various channels fields that we have previously discussed.
+
+
 We use the Context Dependent Environments described in Chapter~\ref{c.cde} to define and supply these values
 at each level of the memory hierarchy during the hardware elaboration process.
+Presently, we encode all parameters with a single Scala case class, and then supply an instance of that class in
+response to query points within the Modules and Bundles that serve as Tilelink endpoints or channels.
+Each case class corresponds to a single TileLink realm.
+We also provide a geographical ~\code{TileLinkKey} that external generators can use to specialize heterogenous TileLink
+networks when multiple networks are instantiated within a given chip, by providing a different case class for each realm.
+
+TODO: Description of how to use CDEs to provide two sets of parameter values to a single hierarchical module.
 
 \begin{table}[ht]
 \begin{center}
@@ -734,15 +744,59 @@ TLNetworkIsOrderedP2P & Boolean & Whether the underlying physical network \\
 \label{tab:tlparams}
 \end{table}
 
-TODO: Description of how to use CDEs to provide two sets of parameter values to a single hierarchical module.
-
 \section{Discussion and Future Work}
 
-Bandwidth: TileLink does not provide any bandwidth specification. 
+TileLink does not not include any specific bandwidth requirements as part of its specification.
+It is up to the user to provision the widths of the data buses underlying each channel and fix the speed of their operation.  
+TileLink does expose aspects of the physical network layer in the form of the \code{TLDataBeats} parameter, which
+controls what subset of a cache line can be provided to endpoints of a particular network per clock cycle.
+Current implementations resend the metadata for each beat of data.
+Future work could investigate the energy efficiency tradeoff between providing metadata per beat with no deserialization overhead,
+versus implementations that provide metadata only per block but must serialize/deserialize the block into multiple beats. 
 
-Extensibility: No limit to user-defined conherence protocols as long as they conform to this transaction structure.
+One of the foundational goals of TileLink is to set no limit to user-defined conherence protocols, as long as they conform to
+its four-hop transaction structure.
+While many protocols, can be expressed in this paradigm, there are some major classes of protocol performance optimization that
+utilize different transaction structures.
+Specifically, the concept of ``ownership,'' where a particular client with write privileges on a line is delegated by the manager
+to respond to coherence requests on that block.
+Inherent to ownership is the concept of direct, client-to-client data and permissions transfer.
+The challenge of adopting such measures is proving that TileLink will remain hierarchically composable.
 
-Interoperability: Proof-of-concept prototypes of modules offering conversion to AXI and RapidIO bus architectures.
+Addressing the ownership question is related to another area of future work:
+the applicability of TileLink to multi-chip coherent shared memory designs.
+While all extant implementations provide coherence over on-chip networks in on-chip memory hierarchies,
+there is no fundamental reason why TileLink could not be applied to multi-chip shared memory designs.
+However, in addition to requiring new modules to implement classical in-memory directories,
+certain classes of optimizations may prove to be critical to performance for which TileLink, as specified here, cannot provide.
+Other design decisions may prove unnecessarily detrimental in the bandwith/latency space of chip-to-chip communications.
+It is unclear whether addressing these concerns is best done within the context of TileLink, or whether we would
+do better to keep the specification specialized for the on-chip domain and fall back on other
+protocol substrates such as AXI or RapidIO to provide chip-to-chip coherence. 
 
-Formal specification of interface: Use logical clocks to define the manager/client interface in terms of composable transducers.
+I am already confident that TileLink as a whole and particularly the baked-in ``uncached'' transactions are suitably general to be mapped to 
+other coherence substrates.
+Interoperability with AXI has already been shown with roof-of-concept prototypes of modules offering conversion between ``uncached'' TileLink messages and AXI4.
+Plans are already underway to provide converters to RapidIO bus architectures as well.
+One remaining challenge is to see where support for conversions between TileLink's user-defined, custom coherence states and message types and other coherence protocols,
+such as ARM's AXI-based ACE or IBM's CAPI.
+I think TileLink's use of the memory op codes discussed in the next chapte may provide the key to inter-protocol conversions of this sort.
+
+Finally, we are working to develop a complete formal specification of the TileLink interface.
+Our current approach uses logical clocks to define the manager/client interface in terms of composable transducers.
+Proving that TileLink agents and channels are transducers allows us to connect them to one another so as to create a memory hierarchy,
+while guaranteeing that they implement one coherent memory history.
+We are also working to use this type of specification to derive sets of unit tests for individual modules implementing one or more TileLink interfaces
+in order to provide directed testing of the hardware implentations to prove that they are TileLink-compatible.
+
+\section{Conclusion}
+
+TileLink is a protocol designed to be a substrate for a set of cache coherence transactions
+that implement a particular cache coherence policy within an on-chip memory hierarchy.
+Any cache coherence protocol that conforms to TileLink's transaction structure can be used interchangeably alongside the physical networks and cache controllers we provide.
+In this way, TileLink is roughly analogous to the data link layer in the IP network protocol stack.
+TileLink is hierarchical, meaning that protocols based on it can be nested inside one another to create multi-level memory hierarchies.
+TileLink is designed to be extensible, and supports a growing family of custom cache coherence policies that I have implemented on top of it,
+and also codifies a set transaction types that are common to all protocols.
+In the next chapter we will discuss how specific coherence policies implemented on top of TileLink can expressed in a concise and composable way.
 

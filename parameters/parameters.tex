@@ -3,31 +3,36 @@
 
 As Moore's law fails, increasing demand for computational efficiency is no longer being matched by gains from process scaling. 
 Instead, chip designers are improving efficiency by combining special-purpose accelerators with general-purpose processors in increasingly heterogenous systems-on-chip.
-In this new world of energy-efficient, heterogeneous, application-specific designs, it will be essential to both improve the productivity of hardware designers as well as enable extensive design-space exploration \cite{shacham-micro10}.
+In this new world of energy-efficient, heterogeneous, application-specific designs, it will be essential to both improve the productivity of hardware designers as well as enable extensive design-space exploration~\cite{shacham-micro10}.
 
 Since it is not possible to build custom chips from scratch for every application,
 we need hardware design tools that allow us to capture decisions made
 during the process of designing one chip and easily make them differently when tackling a new target.
 Creating parameterized hardware generators rather than individual design instances not only allows for application-specific customization of the final hardware,
-but also gives designers the capability to preserve
-knowledge related to performance and energy trade-offs from previous design iterations.
+but also gives designers the capability to preserve knowledge related to performance and energy trade-offs from previous design iterations.
 By parameterizing aspects of the design, we can scale it from test chip sizes to final product without rewriting any modules, amortizing verification costs and increasing the validation confidence over time without rewriting code.
 This approach is integral to our agile aproach to hardware design.
+We use Chisel~\cite{chisel} as a meta-programming language in which we can describe parameterized
+templates for elaborating concrete design instances in Verilog.
 
-The most salient feature of a hardware generator or template compared to a single design instance is that certain features of the design are left under the control of the user deploying it within their chip.
+The most salient feature of a hardware generator or template,
+compared to a single design instance, is that certain features of the design are
+left under the control of the user deploying the generator within their chip.
 We term these features the {\em parameters} of the generator.
-Parameterization is the process by which a generator instantiates a particular design by supplying values for each parameter.
-A parameterization paradigm codifies a particular way of expressing parameters and provides tools to support their application within and injection into a generator.
+{\em Parameterization} is the process by which a generator supplies values for each parameter,
+i.e. binds the name of the parameter to a particular value,
+before using that evaluation to elaborate details of the particular design instance at hand.
+A {\em parameterization paradigm} codifies a particular way of expressing parameters and provides tools to support their application within and injection into a generator,
+as well as mechanisms to constrain their valuations.
 
-From the perspective of the author of a hardware generator, it is impossible to know the full context in which the components created by their generator will be instantiated,
-so the goal is to expose as many parameters as possible to the user while also recording any constraints the internals of the design put on those parameters' values.
-The parameters and their constraints become the interface through which the generator author and the system architect communicate, and define boundaries of the space of designs which it is possible to explore.
+
+The parameters and their constraints become the interface through which the generator author and the system architect communicate, and define boundaries of the space of designs which it is possible for the architect to explore.
 By searching over the top-level parameters exposed by a set of such generators, SoC chip architects can explore tradeoffs between performance, area, and energy efficiency.
 By recording the outcomes of these explorations, these designers can build up a map of how to customize pieces of their design for a particular application's requirements.
 
 Parameterization is clearly a first-order concern in the creation of tools based around custom hardware generation.
 In order to use generators productively, we need to understand how the choice of parameterization paradigm affects designers.
-We claim that the mechanism by which hardware generators are parameterized can greatly influence three metrics of design robustness: reusability, composability, and modularity.
+We claim that the mechanism by which generator-based designs are parameterized can greatly influence three metrics of design robustness: reusability, composability, and modifiability.
 We define these three metrics as follows:
 \begin{description}
 \item[Resuing] modules means that they can be instantiated in different hardware contexts with no internal source code changes, only differing parameterizations. Reusability amortizes verification overhead by reducing the number of lines of code used to create design instances.
@@ -35,8 +40,8 @@ We define these three metrics as follows:
 \item[Modifying] a generator by changing its parameters should not cause a cascade of changes throughout any nested modules which instantiate that generator's output. Modularity avoids accruing technical debt in the face of changing generator capabilities.
 \end{description}
 
-This chapter first provides a taxonomy of existing parameterization paradigms in hardware description languages,
-and evaluates them in terms of the above metrics.
+This chapter first provides a background in how software languages have addressed parameterization.
+We then provide a taxonomy of extant parameterization paradigms in hardware description languages, and evaluate them in terms of the above metrics.
 We then introduce a new parameterization paradigm, called \emph{context-dependent environments} (CDEs).
 In the CDE paradigm, a key-value environment is passed down a hardware module hierarchy, and the value returned for each query can depend on other parameter values at that query's origin within the design.
 The encapsulation of many parameters into a single object coupled with context-specific lookups preserves module reusability and composition, while also improving a generator's robustness to any external module hierarchy modifications.
@@ -49,66 +54,116 @@ By providing support for generating a family of protocols rather than one single
 \section{Background}
 \label{sec:rel}
 
+%Given a set of top-level configurations that supply value bindings for individual parameters, a generator can construct a vast number of different designs from a single piece of templated source code.
+%Hardware generators are an increasingly popular paradigm; examples include Stanford's FPU generator~\cite{fpu}, Lawrence Berkeley National Lab's OpenSoC~\cite{opensoc}, and UC Berkeley's Rocket Chip Generator~\cite{rocket}.
+%Bluespec provides AzureIP Libraries~\cite{azure} to give designers reusable components for use in custom generators. 
+%Support for parameterization is a critical feature of the language in which the generator is written.
+
+When we talk about creating libraries of hardware generators instead of design instances,
+what we are really saying is that we intend to provide support for hardware meta-programming.
+A meta-program is a program that generates or manipulates program code~\cite{templates};
+in this case the target code is expressed in some HDL.
+Specifically in the case of this thesis, Chisel is the meta-programming language (and is itself embedded in Scala), while Verilog is the target language.
 Unlike high-level synthesis tools that transform abstract descriptions of a computation into gates, hardware generators are parameterized, programmatic descriptions of how to elaborate a templated RTL module hierarchy~\cite{templates}.
-Given a set of top-level configurations that supply value bindings for individual parameters, a generator can construct a vast number of different designs from a single piece of templated source code.
-Hardware generators are an increasingly popular paradigm; examples include Stanford's FPU generator~\cite{fpu}, Lawrence Berkeley National Lab's OpenSoC~\cite{opensoc}, and UC Berkeley's Rocket Chip Generator~\cite{rocket}.
-Bluespec provides AzureIP Libraries~\cite{azure} to give designers reusable components for use in custom generators. 
-Support for parameterization is a critical feature of the language in which the generator is written.
 
 Unfortunately, many traditional hardware description languages lack the language features to support parameterization paradigms that make hardware generator composition tractable for large, heterogenous designs.
 Section \ref{sec:tax} discusses how existing parameterization paradigms in Verilog, VHDL, SystemVerilog and Bluespec SystemVerilog limit design modifiability, manifesting in cascades of source code changes when inserting new parameters into modules or when making changes to the module hierarchy.
-In contrast, embedded HDLs, such as Genesis2\cite{genesis2} and Chisel\cite{chisel}, can leverage features of their host programming language to give the designer flexibility and power when describing the parameterization of their design.
+In contrast, embedded HDLs, such as Genesis2~\cite{genesis2} and our Chisel~\cite{chisel}, can leverage features of their host programming language to give the designer flexibility and power when describing the parameterization of their design.
 Moving beyond built-in host language features, we are also free to construct our own parameterization frameworks written in the host language, and intermingle use of these frameworks with the hardware generation capabilities of our embedded HDL.
 
-%Genesis 2: Hardware elaboration language that hosts hardware generators (architectural parameterization -> hardware specification). Leverages SystemVerilog to describe actual hardware description. Builds module tree where each module has a parameter environment. Each can use relative and absolute module paths for inter-module parameter references. Outputs XML to encapsulate full ``configuration'', meaning the text description of how SystemVerilog module declarations are composed. Would need to explicitly rename parameters, can do this in multiple ways, including defining synonyms or referencing a parent's parameter. Adding parameters does require explicit renaming, no mechanism to reference child. Adding cde's would only benefit it, I think.
+The outputs of our generators will have any parameter evaluations automatically embedded in them,
+which means thats we are free from the constraints of the backend language with respect to choice of parameterization paradigm,
+and can also supply parameter bindings from external tools at generation time.
+These advantages are discussed at greater length in Chapter 3 of \cite{shacham2011chip}.
+While the parameters themselves are often instances of simple numerical types (i.e. integers) or logical types (i.e. booleans), depending on the nature of the meta-programming language we can also consider utilizing parameters that are bound to functions or user-defined objects.
+As we will see, exploiting the capability to use more complicated types in the parameterization framework
+is an essential requirement for using it to support customizable cache coherence protocols.
 
-This opportunity inspired us to examine parameterization solutions that have been investigated in software contexts.
+There are several different times during the hardware elaboration process where we might decide to bind parameter values, and in particular this chapter discusses tradeoffs between
+binding parameters at generator compile-time as opposed to generator run-time.
+Taking advantage of later-binding solutions enables both more concise uniquification of elements of nested, heterogenous systems,
+and also allows us to more robustly deal with modifications to the hierarchy of generated modules.
+
+Even once we have settled on binding time, we must still decide on the best way to allow the parameters to be expressed within and among the generators themselves.
+From the perspective of the author of a hardware generator, it is impossible to know the full context in which the components created by their generator will be instantiated,
+so the goal is to expose as many parameters as safely possible to the user,
+while also recording any constraints the internals of the design put on those parameters' values.
+Constrains may also be imposed by parent modules on their children, in the name of interoperability.
+
+The opportunity presented by embedding Chisel in Scala inspired us to examine parameterization solutions that have been investigated in software contexts.
 Fundamentally, parameterization is a name binding problem, in which a data or code entity must be bound to an identifying name.
 Generators express the hardware they elaborate in terms of the parameters' identifiers, and the framework is in charge of supplying the matching data.
 What data is supplied depends on the scoping of the identifier, which might be handled lexically or dynamically.
-
 Lisp languages were the first to explore tradeoffs between dynamic scoping and lexical scoping \cite{gordon}.
+
 With lexical scoping, in order to bind a name to an entity we first search in the local function, then the scope in which this function was defined, and so on.
 ``Lexical'' in this case refers to the text of the source code itself.
 Lexical scoping provides referential transparency, which is a boon for both the programmer and compiler.
+By analyzing the source code, it is possible to determine at compile time whether or not a particular binding is within scope.
+Unfortunately, bindings needed by deeply nested components must be explicitly threaded throughout the class or function hierarchy.
+
 With dynamic scoping, we again search first in the local function, but then search the function that called this function, and so on up the call stack of the running program.
 ``Dynamic'' in this case refers to the fact that the call stack can be different every time a given function is called, and so the binding created for the variable can thereby differ as well.
 Dynamic binding is useful as a substitute for globally-scoped variables, and is excellent for deep customization of nested subsystems.
+In cases where the necessary bindings may radically change from program instance to program instance, dynamic binding allows us to only specific those bindings we know this instance will use.
+Unfortunately, in some cases programmer errors that could have been caught at compile time in a lexically-scoped system become runtime errors in a dynamically-scoped system.
 
 While lexical binding is now the norm for most programming languages, many mechanisms have been developed to allow programmers to explicitly tie in dynamic binding benefits where they are useful.
-These include special binding forms in most Lisp's (\code{fluid-let} in Scheme \cite{steele} and \code{parameterize} in Racket \cite{flatt2013racket}), implicit parameters \cite{lewis2000implicit}, and the Reader monad of Haskell \cite{jones1995functional}.
+These include special binding forms in most Lisp variants
+(e.g. \code{fluid-let} in Scheme \cite{steele} and \code{parameterize} in Racket \cite{flatt2013racket}),
+implicit parameters \cite{lewis2000implicit}, and the Reader monad of Haskell \cite{jones1995functional}.
 While these approaches all focus on re-enabling the parameterization flexibility of dynamic binding in a more controlled manner, 
-the context-dependent environments we propose here are actually a strictly more powerful mechanism than dynamic binding. 
+the context-dependent environments we propose here are actually a strictly more powerful mechanism than traditional dynamic binding. 
+The following taxonomy illustrates how selectively deploying our dynamic scoping solution is the best fit for hardware generation by contrasting it
+with several lexically-scoped solutions
 
-\section{Taxonomy of Extant Hardware Parameterization Paradigms}
+\section{Taxonomy of Parameterization Paradigms}
 \label{sec:tax}
 
-Before introducing context-dependent environments, we first define and contrast three existing parameter-passing paradigms: argument lists, structs, and dynamic environments.
-We examine how these paradigms are used in hardware description languages and evaluate them in terms of a simple case study.
+Before introducing context-dependent environments, we first define and contrast three existing parameterization paradigms: argument lists, structs, and dynamic environments.
+We examine how these paradigms could be or have been used in hardware description languages and evaluate them in terms of a simple case study
+in which we describe making modifications to a hierarchical hardware generator that is composed from multiple sub-generators.
+The three paradigms we contrast in this section are:
 
 \begin{description}
-\item[Argument Lists.] The default, lexical binding approach wherein all parameters are explicitly passed to the constructor of each hardware module.
+\item[Argument Lists.] The default lexical binding approach wherein all parameters are explicitly passed to the constructor function of each hardware module class.
 \item[Structs.] A more sophisticated lexcical binding approach wherein user-defined datatypes are used to abstract away specific parameter binding sites.
-\item[Environments.] A dynamic binding approach wherein a key-value store is used to supply values at runtime.
+\item[Environments.] A dynamic binding approach wherein a key-value store is used to supply parameter values at runtime.
 \end{description}
 
-Each of these approaches attempts to maximize design modularity and reusability by first binding all parameter names at the top level of the module hierarchy and then requesting necessary parameter values within each module. 
-While default values could be supplied locally, any parameters used in inter-generator design space exploration must be exposed at the top level of each generator.
 
 %TODOEach scheme preserves module modularity and reusability by expressing all parameters at the top level and only requesting necessary parameters. We evaluate each paradigm's robustness by adding parameters/modules and counting the number of top-level (TLCs), non-local (NLCs), or local (LCs) source code changes cascading from this initial modification.
 
-%TODOTLCs are updates to parameter assignments at module hierarchy's root. An LC is the original insertion/deletion/modification of a module instantiation, while NLCs are all additional changes passing the TLCs parameter value to the LCs module instantiation. The ideal parameterization paradigm eliminates all NLCs and limits the number of LCs and TLCs.
-
-%TODOThe following sections use examples written in Verilog-like pseudo-code which ignores non-parameter related statements/expressions. Below is the syntax for struct declaration, module declaration, and other object instantiations:
-We can evaluate the robustness of these parameterization paradigms by adding new parameters or modules and examining the source code changes that are required as a result of this initial modification to the design.
+We can evaluate the robustness of these parameterization paradigms by adding new parameters or inserting additional modules, and then examining the source code changes required to bring the new parameter binding into scope. 
 We differentiate three types of source code changes.
-Local changes (LCs) are the initial insertion or modification of a module instantiation. 
-Top-level changes (TLCs) are new parameter assignments made at the top  of the module hierarchy. 
-Non-local changes (NLCs) are all the additional changes required to pass a top-level parameter value (created by a TLC) to a lower-level module instantiation (created by an LC). 
-The ideal parameterization paradigm eliminates all NLCs and limits the number of LCs and TLCs for a given design modification.
 
-The following sections use examples written in Verilog-like pseudo-code which elides non-parameter-related expressions.
-Figure~\ref{fig:phdl} outline the syntax for object declaration and instantiation in our pseudo-HDL.
+\begin{description}
+\item[Local changes (LCs)] are the initial insertion or appending of a module instantiation with a new parameter. 
+\item[Top-level changes (TLCs)] are new parameter bindings performed at the root of the module hierarchy. 
+\item[Non-local changes (NLCs)] are any additional changes required to pass a top-level parameter value (bound by a TLC) to the scope of a lower-level module instantiation (created by an LC). 
+\end{description}
+
+LCs and TLCs are simply inherent to instantiating a new parameterized module or adding a new parameter to an existing module.
+The module using the parameter must be instantiated somewhere in the hierarchy (LC), and the parameter must be bound to a value
+somewhere in that instantiation's scope (TLC).
+In some cases additional LCs are needed to resolve conflicting parameter names.
+
+In contrast, NLCs are a form of unnecessary technical debt whose only function is to bring a parameter binding into scope
+or correct a inter-generator parameter reference that has becoming out-of-date.
+We view being forced to manually add NLCs as representative of
+the brittleness of a particular parameterization paradigm in the face of changes to child generator interfaces
+or module hierarchy depth.
+According to our robustness metric, an ideal parameterization paradigm would eliminate all NLCs,
+while simultaneously minimizing the number of LCs and TLCs needed to implement any given design modification.
+
+%To maximize design modularity and reusability by first binding all parameter names at the top level of the module hierarchy and then requesting necessary parameter values within each module. 
+%While default values could be supplied locally, any parameters used in inter-generator design space exploration must be exposed at the top level of each generator.
+
+The following sections use examples written in Verilog-like pseudo-HDL code which elides non-parameter-related expressions.
+Figure~\ref{fig:phdl} outlines the syntax for object declaration and instantiation in our pseudo-HDL.
+Figure~\ref{fig:block} displays the block diagram organization of a set of nested hardware modules that we will use in our robustness case study.
+We take a Tile generator that is hierarchically composed of Core and Cache generators, and investigate how making modifications to the parameters
+of the leaf generators impacts the rest of the design.
 
 \begin{figure}
 \centering
@@ -116,46 +171,75 @@ Figure~\ref{fig:phdl} outline the syntax for object declaration and instantiatio
 struct S {f:Bool,g:Int}          // struct declaration
 module A #(p1,p2,p3,p4,p5)(...): ... 
    // module declaration: parameters use 1st argument list #(p1,...)
-   // other RTL constructs like IOs use 2nd argument list (not shown)
+   // other RTL constructs like IOs use 2nd argument list (elided)
 module B ()(...):
   a = new S(true, 1)             // struct instantiation
   b = a.f                        // struct access
-  A #(a,b,c,d,e) myA (...)       // module instantiation
+  myA = new A #(a,b,c,d,e)(...)  // module instantiation
 \end{phdl} 
 \caption{Syntax for object declaration and instantiation in our HDL pseudocode.}
 \label{fig:phdl}
 \end{figure}
 
+\begin{figure}
+\centering
+\epsfig{file=parameters/figures/tile.pdf, width=2.7in}
+\caption{Organization of nested modules used in our running example.
+A Tile contains one Core and multiple Caches.
+A Core may or may not contain an FPU, which may or may not be parameterized.}
+\label{fig:block}
+\end{figure}
+
 \subsection{Argument List Parameterization}
 
-\emph{Argument list parameterization} is when parameters are passed-by-value through modules' constructor function arguments. 
-Verilog and VHDL are examples of existing HDLs that solely support this paradigm. 
+\emph{Argument list parameterization} is a paradigm wherein parameters are passed-by-value through class constructor function argument lists. 
+It is the most basic, lexically-scoped way of binding parameters.
+Verilog and VHDL are examples of existing HDLs that solely support this paradigm for parameterizing hardwrae modules.
+ 
+Figure~\ref{fig:arglist} shows code describing the hierarchical \code{Tile} generator from Figure~\ref{fig:block} using argument list parameterization.
+At the root of the module hierarchy, each parameter is bound to a value which is then passed into the module hierarchy via the argument list of \code{Tile}'s constructor.
+These values are then propagated through the module hierarchy via the \code{Core} and \code{Cache} modules' constructors' argument lists.
 
-Figure~\ref{fig:arglist}
-The following example illustrates how this paradigm is brittle to modifications. All top-level parameters are declared then passed directly via \code{Tile's} argument list. These values are propagated down the module hierarchy via the \code{Core} and \code{Cache} argument lists:
+In addition to injecting values into the design, we can enforce contraints on certain parameters.
+For example, in this particular \code{Tile} architecture, both the instruction and data cache must have identical cache block sizes
+because they are multiplexing the same memory port to the rest of the system.
+This requirement is a property of this particular \code{Tile} generator; it was unknown to the designers of the \code{Cache} module.
+Furthermore, other variations of tile generator might not enforce this particular requirement, and so we would like to expose
+\code{icSize} and \code{dcSize} to the design space explorer as independent, top-level variables.
+Thus, the proper place to enforce the constrain is within \code{Tile}, making reference to the parameters that must be bound together.
 
-Figure~\ref{fig:arglist-delta}
-If we modify \code{Core} to use a parameterized queue, \code{PQueue \#(size)}, we must make: (1) a LC for \code{PQueue's} instantiation within Core; (2) a TLC for \code{Top's} parameter declaration list; (3) four NLCs for \code{Tile} and \code{Core}'s declaration parameter list, and \code{Tile} and \code{Core}'s instantiation:
+Figure~\ref{fig:arglist-delta} illustrates how the argument list paradigm is brittle to modifications. 
+We modify \code{Core} to use a parameterized FPU, \code{FPU \#(latency)}, which takes as a parameter the desired latency for the unit.
+In order to enact this modification, we must make several changes to the extant source code:
+(1) a LC for the new \code{FPU}'s instantiation within Core;
+(2) a TLC for \code{Top's} parameter binding;
+(3) four NLCs for \code{Tile} and \code{Core}'s declaration parameter lists, as well as \code{Tile} and \code{Core}'s instantiations.
+The four NLCs represent the brittleness of the paradigm, in that adding a parameter to a leaf  module triggers many non-local changes in any interstitial modules.
+For small designs with simple class hierarchies, the total number of changes might be small.
+However, as we will see in Section~\ref{sec:scca}, in this paradigm the number of NLCs scales with module hierarchy size, making modifications burdensome under this paradigm.
 
-In summary, adding a parameter to a module triggers many non-local changes. For small designs, the total number of changes might be small. However, as we will see in Section~\ref{sec:scca}, the number of NLCs scales with module hierarchy size, making modifications burdensome under this paradigm.
-
+Further complexity arises if we consider a set of different FPU implementations, each with a unique or even partially overlapping set of parameters.
+The set of parameters included in each intervening module's constructor becomes the superset of all the child modules' parameters.
+Determining which parameters are actually unique and supplying default values for any which are unused in a particular design instance becomes burdensome
+as more and more generators are composed.
 
 \begin{figure}
 \centering
 \begin{phdl}
 module Top#()():
-  fpu? = true    // Whether our core should instantiate an FPU
-  icSize = 256   // Size of the instruction cache
-  dcSize = 512   // Size of the data cache
-  Tile #(fpu?,icSize,dcSize) myTile (...)
-module Tile #(fpu?,icSize,dcSize)(...):
-  Core  #(fpu?) myCore (...)
-  Cache #(icSize) myIcache (...)
-  Cache #(dcSize) myDcache (...)
-  assert (icSize < dcSize) ...
-module Cache #(size)(...):... // icSize/dcSize implicitly renamed size
-module Core #(fpu?)(...) :
-  Queue myIQ (...) ...
+  hasFpu = true  // Whether our core should instantiate an FPU
+  icSize = 64    // Size of the instruction cache's blocks
+  dcSize = 64    // Size of the data cache's blocks
+  myTile = new Tile #(hasFpu, icSize, dcSize)(...)
+module Tile #(hasFpu, icSize, dcSize)(...):
+  myCore = new Core  #(hasFpu)(...)
+  icache = new Cache #(icSize)(...)
+  dcache = new Cache #(dcSize)(...)
+  assert (icSize == dcSize)         // The tile is multiplexing a single port
+module Cache #(blockSize)(...): ... // icSize/dcSize each renamed blockSize
+module Core #(hasFpu)(...):
+  if(hasFpu) myFpu = new FPU()(...) ...
+module FPU #()(...): ...
 \end{phdl} 
 \caption{An example module hierarchy containing a tile with a processor core and two caches, parameterized through constructor arguments.}
 \label{fig:arglist}
@@ -165,232 +249,253 @@ module Core #(fpu?)(...) :
 \centering
 \begin{phdl}
 module Top #()():
-  (*@\textcolor[rgb]{1,0,0}{iqSize = 32}@*)  // Size of issue queue                            // TLC
-  fpu? = true
-  icSize = 256 
-  dcSize = 512
-  Tile #(fpu?,icSize,dcSize,(*@\textcolor[rgb]{1,0,0}{iqSize}@*)) myTile (...)                 // NLC
-module Tile #(fpu?,icSize,dcSize,(*@\textcolor[rgb]{1,0,0}{iqSize}@*))(...):                   // NLC
-  Core #(fpu?,(*@\textcolor[rgb]{1,0,0}{iqSize}@*)) myCore (...)                               // NLC
-  Cache #(icSize) myIcache (...)
-  Cache #(dcSize) myDcache (...)
-  assert (icSize < dcSize)
-module Cache #(size)(...) : ... 
-module Core #(fpu?,(*@\textcolor[rgb]{1,0,0}{iqSize}@*))(...) :                                // NLC
-  (*@\textcolor[rgb]{1,0,0}{PQueue \#(iqSize) myIQ (...)}@*)  // Add parameterized queue        // LC
-module PQueue #(size)(...):... // iqSize implicitly renamed size
+  hasFpu = true  // Whether our core should instantiate an FPU
+  (*@\textcolor[rgb]{1,0,0}{fpuLat = 6}@*)     // Latency of FPU                               // TLC
+  icSize = 64    // Size of the instruction cache's blocks
+  dcSize = 64    // Size of the data cache's blocks
+  myTile = new Tile #(hasFpu, icSize, dcSize,(*@\textcolor[rgb]{1,0,0}{fpuLat}@*))(...)        // NLC
+module Tile #(hasFpu, icSize, dcSize,(*@\textcolor[rgb]{1,0,0}{fpuLat}@*))(...):               // NLC
+  myCore = new Core  #(hasFpu, (*@\textcolor[rgb]{1,0,0}{fpuLat}@*))(...)                      // NLC
+  icache = new Cache #(icSize)(...)
+  dcache = new Cache #(dcSize)(...)
+  assert (icSize == dcSize) 
+module Cache #(blockSize)(...) : ... 
+module Core #(hasFpu,(*@\textcolor[rgb]{1,0,0}{fpuLat}@*))(...) :                              // NLC
+  if(hasFpu) myFpu = new (*@\textcolor[rgb]{1,0,0}{PFPU \#(fpuLat)}@*)(...) ...                 // LC
+module PFPU #(latency)(...): ...     // Add parameter to FPU 
 \end{phdl}
-\caption{Adding a new submodule that contains a new parameter.}
+\caption{Example of the source changes required to append a new leaf submodule (PFPU) that contains a new parameter.}
 \label{fig:arglist-delta}
 \end{figure}
 
 \subsection{Struct Parameterizations}
 
-SystemVerilog and Bluespec provide user-defined struct types, and these can be used to encapsulate multiple parameters within individual statically-typed objects. These structs can be organized in two ways.
+If the HDL provides user-defined struct types, these can be used to encapsulate multiple parameters within individual statically-typed objects.
+SystemVerilog and BluespecSV are two HDLs that provide this capability.
+For the purposes of our taxonomy, we posit that parameterization paradigms based on structs can be organized in two particular ways.
+In \emph{flat-struct parameterization}, each module is paired with a unique struct type containing all parameters used by that module and all of its child modules.
+This approach provides only a very limited advantage over the previously discussed argument list paradigm.
+In \emph{nested-struct parameterization}, instead of a module's companion struct consisting of a flat list of parameters,
+it rather contains its local parameters as well as the parameter structs for its immediate children. 
+This nesting allows further abstraction of the specific fields of the child modules' structs.
 
-\subsubsection{Flat-Struct Parameterization}
+Both of these schemes are still lexically scoped, but we have moved the site of the bindings into a class hierarchy of struct types,
+which may be distinct from the module hierarchy itself.
+This level of indirection affords us some opportunities to abstract away the specifics of what parameters are needed by which children.
+By reducing the number of places we have to explicitly pass individual parameters' values among modules, we congruently reduce
+the amount of work it takes to thread new parameters through the same module  class hierarchy.
 
-In \emph{flat-struct parameterization}, each module has a unique specialized struct type containing all parameters used by that module and all of its child modules. This scheme eliminates some non-local changes because module constructor argument lists do not grow with additional parameters:
-Figure~\ref{fig:flatstruct}
-However, when inserting a \code{PQueue}, this scheme still requires some non-local changes because every parent's parameter struct declaration and instantiation must be changed:
-Figure~\ref{fig:flatstruct-delta}
-Putting all top-level parameters into a single flat-struct which is passed to every module in the design
-eliminates NLCs but means that sub-modules within the design cannot be reused in other contexts.
+Taking this idea a step further, we can recognize that we do not have to maintain a one-to-one mapping between the class hierarchy of structs and the class hierarchy of modules.
+In the most extreme case, we could put all top-level parameters into a single struct which is passed to every module in the design,
+essentially recreating a flat parameter scoping based on global constants.
+Such a solution improves modifiability by eliminating all NLCs, but is ruinous for composability
+because it means that sub-modules within the design cannot be reused in other contexts.
+However, more moderate solutions that exploit differences in the struct hierarchy and module hierarchy are possible at the designers' discretion.
+For simplicity, the rest of this section utilizes the simpler one-to-one mapping to illustrate the differences between the struct paradigms.
 
 \begin{figure}
 \centering
 \begin{phdl}
-struct tilePars {fpu?:Bool,icSize:Int,dcSize:Int}
-struct corePars {fpu?:Bool}
+struct TilePars {hasFpu:Bool, icSize:Int, dcSize:Int} // Structs definitions
+struct CorePars {hasFpu:Bool}
 module Top #()():
-  fpu? = true    // Whether the core should instantiate an FPU
-  icSize = 256   // Size of the instruction cache
-  dcSize = 512   // Size of the data cache
-  tp = new tilePars(fpu?,icSize,dcSize)
-  Tile #(tp) myTile (...)
+  tp = new TilePars(true, 64, 64)                     // Struct instantiation
+  myTile = new Tile #(tp)(...)
 module Tile #(params)(...):
-  cp = new corePars(params.fpu?)
-  Core  #(cp) myCore (...)
-  Cache #(params.icSize) myIcache (...)
-  Cache #(params.dcSize) myDcache (...)
-  assert (params.icSize < params.dcSize) ...
-module Cache #(size)(...) : ...
-module Core #(params)(...) :
-  Queue myIQ (...) ...
+  cp = new CorePars(params.hasFpu)                    // Struct instantiation
+  myCore = new Core  #(cp)(...)
+  icache = new Cache #(params.icSize)(...)
+  dcache = new Cache #(params.dcSize)(...)
+  assert (params.icSize < params.dcSize)
+module Cache #(blockSize)(...) : ...
+module Core #(params)(...):
+  if(params.hasFpu) myFpu = new FPU()(...) ...
+module FPU #()(...): ...
 \end{phdl} 
-\caption{The same example module hierarchy, but parameterized through flat structs.}
+\caption{The same example module hierarchy, but parameterized through flat structs instead of argument lists.}
 \label{fig:flatstruct}
 \end{figure}
 
 \begin{figure}
 \centering
 \begin{phdl}
-struct tilePars {fpu?:Bool,icSize:Int,dcSize:Int,(*@\textcolor[rgb]{1,0,0}{iqSize:Int}@*)}     // NLC
-struct corePars {fpu?:Bool,(*@\textcolor[rgb]{1,0,0}{iqSize:Int}@*)}                           // NLC
+struct TilePars {hasFpu:Bool, icSize:Int, dcSize:Int, (*@\textcolor[rgb]{1,0,0}{fpuLat:Int}@*)} // NLC
+struct CorePars {hasFpu:Bool, (*@\textcolor[rgb]{1,0,0}{fpuLat:Int}@*)}                         // NLC
 module Top #()():
-  (*@\textcolor[rgb]{1,0,0}{iqSize = 32}@*)  // Size of issue queue                            // TLC
-  fpu? = true
-  icSize = 256
-  dcSize = 512
-  tp = new tilePars(true,256,512,(*@\textcolor[rgb]{1,0,0}{32}@*))                             // NLC
-  Tile #(tp) myTile (...)
-module Tile #(params)(...):
-  cp = new corePars(params.fpu?,(*@\textcolor[rgb]{1,0,0}{params.iqSize}@*))                   // NLC
-  Core  #(cp)  myCore   (...)
-  Cache #(params.icSize) myIcache (...)
-  Cache #(params.dcSize) myDcache (...)
+  tp = new TilePars(true, 64, 64, (*@\textcolor[rgb]{1,0,0}{6}@*))                              // TLC
+  myTile = new Tile #(tp)(...)                                    // No NLC
+module Tile #(params)(...):                                       // No NLC
+  cp = new CorePars(params.hasFpu, (*@\textcolor[rgb]{1,0,0}{params.fpuLat}@*))                 // NLC
+  myCore = new Core  #(cp)(...)                                   // No NLC
+  icache = new Cache #(params.icSize)(...)
+  dcache = new Cache #(params.dcSize)(...)
   assert (params.icSize < params.dcSize) ...
 module Cache #(size)(...) : ...
-module Core #(params)(...) :
-    (*@\textcolor[rgb]{1,0,0}{PQueue \#(params.iqSize) myIQ (...)}@*)// Add parameterized queue // LC
-module PQueue #(size)(...) : ...]
+module Core #(params)(...) :                                     // No NLC
+  if(params.hasFpu) myFpu = new (*@\textcolor[rgb]{1,0,0}{PFPU \#(params.fpuLat)}@*)(...) ...   // LC
+module PFPU #(latency)(...): ...     // Add parameter to FPU 
 \end{phdl} 
-\caption{Adding a new submodule that contains a new parameter.}
+\caption{Example of the source changes required to append a new leaf submodule (PFPU) that contains a new parameter,
+under the flat-struct paradigm.}
 \label{fig:flatstruct-delta}
 \end{figure}
 
-\subsubsection{Nested-Structs Parameterization}
-
-To avoid cascading changes to all parent's parameter struct declaration and instantiation, one can use \emph{nested-struct parameterization}. Instead of a module's struct consisting of a flat list of parameters, it contains its parameters as well as the parameter structs for its immediate children. If applied to the previous example, only \code{PQueue's} immediate parent's struct, \code{corePars}, would need modification:
-
-Figure~\ref{fig:nestedstruct-append}
-Figure~\ref{fig:nestedstruct-insert}
-
-Although the nested-structs approach eliminates almost all NLCs, it presents its own set of problems. 
-Suppose we want to add a prefetcher to our instruction cache. 
-We append module \code{Prefetch} with a single parameter (\code{distance}) and insert module \code{CacheWithPF} that instantiates our \code{Cache} and \code{Prefetch} modules. 
-Unfortunately, this breaks our previously-existing assert statement because the nested structure of the parameter objects explicitly encodes the module hierarchy:
+Figure~\ref{fig:flatstruct} and Figure~\ref{fig:flatstruct-delta} show how the flat-struct paradigm,
+applied with a one-to-one mapping between modules and structs,
+can still eliminate some non-local changes.
+This reduction is due to the fact that module constructor argument lists do not grow with additional parameters.
+While the definitions of all the structs must be changed to account for the new parameter,
+instances where a single struct instance is passed to multiple module instantiations do not need to be changed,
+as the module instantiation does not reference the individual fields of the struct.
+However, Figure~\ref{fig:flatstruct-delta} shows that when inserting the newly parameterized \code{PFPU},
+this scheme still requires some non-local changes because every parent's parameter struct declaration and instantiation must be changed.
+In Section~\ref{sec.scca} we will see that the flat-struct paradigm is only a constant factor less brittle than the argument list paradigm.
 
 \begin{figure}
 \centering
 \begin{phdl}
-struct corePars {fpu?:Boolean,(*@\textcolor[rgb]{1,0,0}{iqSize:Int}@*)}                        // NLC
-struct tilePars {cp:corePars,icSize:Int,dcSize:Int}
+struct CorePars {hasFpu:Boolean, (*@\textcolor[rgb]{1,0,0}{fpuLat:Int}@*)}                     // NLC
+struct TilePars {cp:CorePars, icSize:Int, dcSize:Int}            // No NLC
 module Top #()():
-  (*@\textcolor[rgb]{1,0,0}{iqSize = 32}@*)                                                    // TLC
-  fpu? = true
-  icSize = 256
-  dcSize = 512
-  cp = new corePars(fpu?,(*@\textcolor[rgb]{1,0,0}{iqSize}@*))                                 // NLC
-  tilePars tp (cp,icSize,dcSize)
-  Tile #(tp) myTile (...)
-module Tile #(params)(...):
-  Core  #(params.cp)  myCore   (...)
-  Cache #(params.icSize) myIcache (...)
-  Cache #(params.dcSize) myDcache (...)
+  cp = new CorePars(true ,(*@\textcolor[rgb]{1,0,0}{fpuLat}@*))                                // TLC
+  tp = new TilePars(cp, 64, 64)                                  // No NLC
+  myTile = new Tile #(tp)(...)                                   // No NLC
+module Tile #(params)(...):                                      // No NLC
+  myCore = new Core  #(params.cp)(...)                                                        
+  icache = new Cache #(params.icSize)(...)
+  dcache = new Cache #(params.dcSize)(...)
   assert (params.icSize < params.dcSize) ...
-module Cache #(size)(...) : ...
-module Core #(params)(...) :
-    (*@\textcolor[rgb]{1,0,0}{PQueue \#(params.iqSize) myIQ (...)}@*)// Add parameterized queue // LC
-module PQueue #(size)(...) : ...
+module Cache #(size)(...): ...
+module Core #(params)(...):                                     // No NLC
+  if(params.hasFpu) myFpu = new (*@\textcolor[rgb]{1,0,0}{PFPU \#(params.fpuLat)}@*)(...) ...   // LC
+module PFPU #(latency)(...): ...     // Add parameter to FPU 
 \end{phdl} 
-\caption{Appending a new submodule that contains a new parameter.}
+\caption{Example of the source changes required to append a new leaf submodule (PFPU) that contains a new parameter,
+under the nested-struct paradigm.}
 \label{fig:nestedstruct-append}
 \end{figure}
 
 \begin{figure}
 \centering
 \begin{phdl}
-struct corePars {fpu?:Bool,iqSize:Int}
-struct tilePars {cp:corePars,icSize:Int,dcSize:Int}
+struct CorePars {hasFpu:Bool, fpuLat:Int}
+struct TilePars {cp:CorePars, (*@\textcolor[rgb]{1,0,0}{cpf:CachePFPars}@*), dcSize:Int}      // NLC
+struct CachePfPars {dist: Int, size:Int} // New struct for Prefetcher
 module Top #()():
-  iqSize = 32
-  (*@\textcolor[rgb]{1,0,0}{dist = 16}@*)    // Distance prefetched                            // TLC
-  fpu? = true
-  icSize = 256
-  dcSize = 512
-  (*@\textcolor[rgb]{1,0,0}{cpf = new cachePfPars(dist,icSize)}@*) // Insert cache+prefetcher  // NLC
-  cp = new corePars(fpu?,iqSize)
-  tp = new tilePars(cp,cpf,dcSize)
-  Tile #(tp) myTile (...)
+  (*@\textcolor[rgb]{1,0,0}{cpf = new CachePfPars(16, 64)}@*)  // Icache size now nested      // TLC
+  cp = new CorePars(true, 6)
+  tp = new TilePars(cp, (*@\textcolor[rgb]{1,0,0}{cpf}@*), 64)                                // NLC
+  myTile = new Tile #(tp)(...)
 module Tile #(params)(...):
-  Core  #(params.cp)  myCore   (...)
-  (*@\textcolor[rgb]{1,0,0}{CacheWithPF \#(params.cpf) myIcache (...)}@*)                       // LC
-  Cache #(params.dcSize) myDcache (...)
-  assert ((*@\textcolor[rgb]{1,0,0}{params.cpf.size}@*) < params.dcSize)                       // NLC
-module CacheWithPF #(params)(...)
-struct cachePfPars {dist, size}
-module Prefetch #(dist)(...) : ...
-... // Cache, Core, PQueue module declarations are unchanged
+  myCore = new Core  #(params.cp)(...)
+  icache = new (*@\textcolor[rgb]{1,0,0}{CacheWithPF \#(params.cpf)(...)}@*)                   // LC
+  dcache = new Cache #(params.dcSize)(...)
+  assert ((*@\textcolor[rgb]{1,0,0}{params.cpf.size}@*) < params.dcSize)                      // NLC
+module CacheWithPF #(params)(...):  // New module that adds prefetch functionality to cache
+  myCache = new Cache #(params.size)(...)
+... // Cache, Core, FPU declarations are unchanged
 \end{phdl} 
-\caption{Inserting a new submodule that contains a new parameter.}
-\label{fig:flatstruct-delta}
+\caption{Example of the source changes required to insert a new interstitial submodule (CacheWithPF) that contains a new parameter,
+under the nested-struct paradigm.}
+\label{fig::nestedstruct-insert}
 \end{figure}
 
-\subsubsection{Summary}
+We can adopt \emph{nested-struct parameterization} to avoid the aforementioned cascading changes to all parent parameter structs' declarations and instantiations. 
+Instead of a module's paired struct consisting of a flat list of parameters, it contains only its parameters as well as the parameter structs for its immediate children. 
+Figure~\ref{fig:nestedstruct-append} applies this approach to the previous example of appending a parameterized FPU.
+Only \code{PFPU}'s immediate parent's companion struct, \code{CorePars}, needs modification.
+The fact that \code{CorePars} now has an additional parameter associated with it is now abstracted away from both \code{Tile} and \code{TilePars}.
 
-While both struct paradigms are acceptable for small and flat designs, generators often have deep module hierarchies or interoperate with modules from multiple libraries. 
-These paradigms embrittle these designs because changes to the module structure break any inter-module parameter reference. 
-Note that these broken references can be located anywhere in the design, often not located near the LC; nested-structs cannot guarantee a robust design despite reducing NLCs.
+Although the nested-structs paradigm eliminates almost all NLCs related appending new leaf modules to the hierarchy,
+it retains another disadvantage related to inserting new levels into the module hierarchy.
+Figure~\ref{fig:nestedstruct-insert} provides an example of a such a scenario.
+Suppose we want to add a prefetcher to our instruction cache. 
+We insert module \code{CacheWithPF}, with a single parameter (\code{distance}), that instantiates our original \code{Cache} module. 
+
+The nested-struct paradigm does allow us to add \code{distance} without changing \code{Tile}'s constructor, avoiding an NLC.
+Unfortunately, adding a new level of nesting in the parameter structs breaks our previously-existing assert statement in \code{Tile}. 
+Because the nested structure of the parameter objects explicitly mirrors the module hierarchy,
+any changes to the nesting will break references to child parameters that parent modules are enforcing.
+This results in a whole new class of NLC issues, ones that would have not arisen with the simpler argument list approach.
+
+While both struct paradigms are acceptable for flat class hierarchies with limited possible nestings,
+generators often have deep module hierarchies or interoperate with modules from multiple libraries. 
+These lexically-scoped paradigms embrittle such designs because changes to the module hierarchy break a parent's references to its childrens' parameters. 
+Note that these broken references can be located anywhere in the design, often not located near the LC that inserts the new module.
+Overall, even nested-structs cannot guarantee a robust design, despite significantly reducing NLCs.
+
 
 \subsection{Environment Parameterization}
 %\subsubsection{Definition and Existing Support}
-An \emph{environment} is an immutable key-value store that can be inherited and passed with modifications. While similar to POSIX environments where shell languages have a first-class syntax for accessing environment values (e.g. \$foo), any implementation in an HDL will have to explicitly pass the environment object to query it.
-
-We do not consider similar dynamic scoping solutions such as global constants, preprocessor macros, or global key-value stores because such schemes lack modularity.
-They generally do not give the designer a mechanism manage namespace collisions between different third-party generators, 
-and, more importantly, they do not allow designers to override values in a context-dependent way when instantiating modules in a heterogenous system.
-
-Unfortunately, SystemVerilog and Bluespec (as well as Verilog and VHDL) cannot support environments as they require either nested functions or HashMaps. %TODO
- While the SystemVerilog language includes associative arrays (similar to HashMaps), most SystemVerilog compilers do not support this language construct. 
-%This environment could be implemented in Bluespec or SystemVerilog using tagged unions or associative arrays. Unfortunately, both languages do not support dynamically typed parameters and thus cannot pass associative arrays as parameter objects. Tagged unions, however, can be statically-type safe and used if the types of all parameters are known. While both Bluespec and SystemVerilog claim support for tagged unions, many SystemVerilog compilers lack support for them.
-
-Chisel and Genesis2 leverage Scala and Perl, respectively, for module hierarchy elaboration. Because Scala and Perl support first-class functions and maps, both HDLs can support regular environment passing.
-
-% Bluespec requires all type checking be resolved prior to elaboration; since the compiler cannot guarantee that the returned value is type safe, associative arrays are not supported. 
-
-%\subsubsection{Robustness Example}
-
-Our pseudo-HDL can support environments with the following syntax for instantiation, modification, and querying:
-Figure~\ref{fig:env-phdl}
-An important note is that the \code{++}  operator returns a new environment and does not affect the original environment. In addition, all values in key-value pairs are lazily evaluated only when a query matches a key.
 
 \begin{figure}
 \centering
 \begin{phdl}
-x = {'key1' -> 1,'key2' -> 3} // CDE instantiation
-y = x ++ {'key1' -> 2}        // CDE modification
-print x('key1')               // CDE query, prints '1'
-print y('key1')               // CDE query, prints '2'
-print y('key2')               // CDE query, prints '3'
+x = {'key1' -> 1,'key2' -> 3} // Environment instantiation
+y = x ++ {'key1' -> 2}        // Environment modification
+print x('key1')               // Environment query, prints '1'
+print y('key1')               // Environment query, prints '2'
+print y('key2')               // Environment query, prints '3'
 \end{phdl}
 \caption{Syntax for environment instantiation, modification and quering in our pseudo-HDL.}
 \label{fig:env-phdl}
 \end{figure}
 
+Unsatisfied with lexical scoping for deeply nested hierarchies, we now turn our attention to dynamic scoping solutions.
+We begin by characterizing an environment-based approach to dynamic scoping.
+We do not consider some alternative dynamic scoping solutions such as global constants or preprocessor macros because such implementations lack modularity.
+They generally do not give the designer a mechanism manage namespace collisions between different third-party generators, 
+and, more importantly, they do not allow designers to override values in a context-dependent way when instantiating modules in a heterogenous system.
 
-In the following example, all modules with two or more parameters now accept an environment parameter:
-Figure~\ref{fig:env}
-%To parameterize a child module, a parent copies its own environment and adds/overwrites any key-value mapping before passing it to the child's parameter list. The original example is shown below using environment passing:
+An \emph{environment} is an immutable key-value store that can be inherited by an instance of a module and passed along to its children
+with modifications made to the key-value bindings.
+Code within modules can gain access to certain parameter values by looking up the parameter's key in the environment.
+Critically for composability, we do not have to pass any possible parameter through the module hierarchy manually.
+If a particular instance of a design does not use a particular parameter, that parameter never has to be bound or referenced.
+If a new module is added, bindings for its parameters can be supplied to the environment from any parent location in the heirarchy.
+The cost we pay for this flexibility is that any unbound parameters can only be detected at runtime, rather than at compile time.
 
-Suppose we apply both modifications (replacing \code{Queue} with \code{PQueue} and inserting \code{CacheWithPF}); the only changes required are local and top-level:
-Figure~\ref{fig:env-delta}
+While similar to POSIX environments, where shell languages have a first-class syntax for accessing environment values (e.g. \$foo),
+any implementation of environments in an existing HDL will have to explicitly pass the environment object through the hierarchy to query it.
+Unfortunately, SystemVerilog and Bluespec (as well as Verilog and VHDL) cannot support environments, as environments require either nested functions or HashMaps.
+While the SystemVerilog language includes associative arrays (similar to HashMaps), most SystemVerilog compilers do not support this language construct. 
+This type of environment could be implemented in Bluespec or SystemVerilog using tagged unions or associative arrays.
+Unfortunately, neither language supports dynamically typed parameters, and thus cannot pass associative arrays as parameter objects.
+Bluespec requires all type checking be resolved prior to elaboration; since the compiler cannot guarantee that the returned value is type safe, associative arrays are not supported. 
+Tagged unions, however, can be statically-type safe and used if the types of all parameters are known.
+While both Bluespec and SystemVerilog claim support for tagged unions, many SystemVerilog compilers lack support for them.
 
-Although the environment passing paradigm succeeds in removing all NLCs, there is an additional LC required to rename the \code{dcSize} parameter to \code{size}; 
-\code{CacheWithPF} should only query for \code{size} to make it modular. 
-However, because there are two caches, we should not contextualize the parameter name (e.g. change \code{size} to \code{icSize}) because the module could be instantiated, in a different design, as a data cache. 
-Thus, an explicit renaming step is necessary to customize the \code{CacheWithPF} parameter environment.
+Chisel and Genesis2 leverage Scala and Perl, respectively, for metaprogramming the module hierarchy generation stage of hardware elaboration.
+Because Scala and Perl support first-class functions and maps, both HDLs can easily provide the type of environment discussed here.
+As we will see in Section~\ref{sec:impl}, Scala's support for implicit parameters makes it particularly syntactically concise to distribute
+the environment object through the module hierarchy.
 
-For designs that do not have a large number of parameter namespace collisions, environment passing is a great solution as it will significantly reduce the number of NLC. 
-Unfortunately, some designs have many homogenous children (e.g. a mesh of routers) and the renaming of parameters will be tedious, brittle, and not robust. 
-For this reason, we now turn to context-dependent environments.
+TODO Genesis 2 builds a module tree where each module has a parameter environment.
+\cite{shacham2011chip}
+Each module can use relative and absolute module paths for inter-module parameter references. 
+The framework outputs XML to encapsulate the full ``configuration'', meaning the text description of how SystemVerilog module declarations are composed.
+Parameters are read-only, deep copies of code or functions.
+%Would need to explicitly rename parameters, can do this in multiple ways, including defining synonyms or referencing a parent's parameter. Adding parameters does require explicit renaming, no mechanism to reference child. Adding cde's would only benefit it, I think.
+
+Figure~\ref{fig:env-phdl} provides an oveview of the additional syntax we introduce to our pseudo-HDL in order to allow it to support instantiation, modification, and querying of environments.
+An important note is that the \code{++} operator, which adds a binding to the store, returns a new environment and does not affect the original environment.
+In addition, all values in key-value pairs are lazily evaluated only when a query matches a key.
+
 
 \begin{figure}
 \centering
 \begin{phdl}
 module Top #()():
-  topPars = {'fpu?'   -> true, // TLC are only to this environment 
-             'icSize' -> 256,
-             'dcSize' -> 512}
-  Tile #(topPars) myTile (...)
+  topPars = {'hasFpu'->true, 'icSize'->64, 'dcSize'->64} // Top-level bindings
+  myTile = #(topPars)(...)
 module Tile #(params)(...):
-  Core  #(params) myCore (...)
-  Cache #(params('icSize')) myIcache (...)
-  Cache #(params('dcSize')) myDcache (...)
-  assert (params('icSize') < params('dcSize')) ...
-module Cache #(params)(...) : ...
+  myCore = new Core  #(params)(...)
+  icache = Cache #(params('icSize'))(...)          // Parameter lookup
+  dcache = Cache #(params('dcSize'))(...)          // Parameter lookup
+  assert (params('icSize') < params('dcSize')) ... // Parameter lookups
+module Cache #(size)(...) : ...
 module Core  #(params)(...) :
-  Queue myIQ #(...) ...
+  if(params('hasFpu') myFPU = new FPU #()(...) ... // Parameter lookup
 \end{phdl} 
 \caption{The same example module hierarchy, but parameterized through dynamic environments.}
 \label{fig:env}
@@ -400,76 +505,66 @@ module Core  #(params)(...) :
 \centering
 \begin{phdl}
 module Top #()():
-  topPars = {(*@\textcolor[rgb]{0.8,0,0}{'iqSize' -> 32}@*),                                     // TLC
-             (*@\textcolor[rgb]{1,0,0}{'dist' -> 16}@*),                                       // TLC
-             'fpu?'   -> true,
-             'icSize' -> 256,
-             'dcSize' -> 512}
-  Tile #(topPars) myTile (...)
-module Tile #(params)(...):
-  Core  #(params) myCore (...)
-  (*@\textcolor[rgb]{1,0,0}{cpfPars = params ++ \{'size' -> params(`icSize')\}}@*)               // LC
-    // this rename from `dcSize' to `size' must be explicit
-  (*@\textcolor[rgb]{1,0,0}{CacheWithPF \#(cpfPars) myIcache (...)}@*)                          // LC
-  Cache #(params('dcSize')) myDcache (...)
+  topPars = {'hasFpu' -> true, 'icSize' -> 64, 'dcSize' -> 64, (*@\textcolor[rgb]{0.8,0,0}{'fpuLat' -> 6}@*), (*@\textcolor[rgb]{1,0,0}{'dist' -> 16}@*) } // TLCs
+  myTile = Tile #(topPars)(...)                                  // No NLC
+module Tile #(params)(...):                                      // No NLC
+  myCore = Core #(params)(...)                                   // No NLC
+  // The following rename from `icSize' to `size' must be handled here by icache's parent
+  (*@\textcolor[rgb]{1,0,0}{icPars = params ++ \{'size' -> params(`icSize')\}}@*)                // LC for CacheWithPF
+  icache = new (*@\textcolor[rgb]{1,0,0}{CacheWithPF \#(icPars)(...)}@*)                        // LC for CacheWithPF
+  dcache = new Cache #(params('dcSize'))(...)
   assert (params('icSize') < params('dcSize')) ...
 module CacheWithPF #(params)(...) :
-  Cache #(params('size'))(...) // CacheWithPF queries 'size'
-  Prefetch #(params('dist'))(...)
+  Cache #(params('size'))(...) ... // CacheWithPF queries 'size'
 module Core #(params)(...) :
-  (*@\textcolor[rgb]{.8,0,0}{PQueue \#(params('iqSize')) myIQ (...)}@*)                          // LC
-... // Cache, PQueue, Prefetch module declarations are unchanged
+   if(params('hasFpu') myFPU = new (*@\textcolor[rgb]{.8,0,0}{PFPU \#(params('fpuLat'))}@*)(...) // LC for PFPU
+... // Cache, PFPU module declarations are unchanged
 \end{phdl} 
-\caption{Adding a new submodule that contains a new parameter.}
+\caption{Simultaneously appending a new submodule that contains a new parameter, while also inserting
+a new interstitial module that contains a new parameter. Dynamic environments eliminate NLCs.}
 \label{fig:env-delta}
 \end{figure}
 
-\section{Context Dependent Environments}
+Figure~\ref{fig:env} shows the code for our running example of the tile generator, modified to use the environment to supply parameters to all modules with two or more parameters.
+To parameterize a child module, a parent copies its own environment and adds/overwrites any needed key-value mappings before passing it to the child.
+While keys can be overridden in certain sub-modules, the overall namespace provided by the environment is flat, and does not codify anything about the structure of the module hierarchy.
+Figure~\ref{fig:env-delta} demonstrates the advantages of this flexiblity by applying both of the modifications from previous case study examples
+(replacing the appended \code{FPU} with \code{PFPU} and inserting \code{CacheWithPF}).
+Significantly, the only changes required are LCs and TLCs, with no NLCs whatsoever.
+Even the cross-module assertion on cache sizes in \code{Tile} does not require modification.
+
+Although the environment passing paradigm succeeds in removing all NLCs,
+there is an additional LC required to rename the \code{icSize} parameter to \code{size}.
+Why does \code{CacheWithPF} query for \code{size} instead of \code{icSize}?
+The generator designer wanted it to be composable with any cache, not bind it to a particular instance.
+We should not contextualize the parameter name (e.g. change \code{size} to \code{icSize}) because the sub-module that is instantiated, in a different design, could be a data cache. 
+Thus, an explicit renaming step is necessary to customize the parameter environment passed to \code{CacheWithPF}, telling it which top-level parameter to use
+in response to any internal queries made regarding \code{size}.
+We consider the source code change required to perform the renaming by modifying the environment an LC rather than an NLC because it always occurs in conjunction
+with the LC that instantiates the newly inserted module.
+However, it is worth noting that the renaming must be performed for each unique instance of the module that takes on a different, heterogenous value.
+
+In general, we will often have modules that have either intentionally picked a context-free key, or simply use parameter keys that coincidentally overlap with those
+used by some other imported generator.
+Differentiating these conflicting keys and assigning them to the proper top-level key bindings is both the power and the burden of the dynamic environment paradigm.
+For designs that do not have a large number of parameter key collisions, environment passing is a great solution as it will significantly reduce the number of NLCs. 
+Unfortunately, in the not uncommon case of designs that have many instances of the same child module class (e.g. a mesh of routers), the re-mapping of unique top-level parameters onto generic, re-used child parameters
+that must occur every time one of these children is instantiatied becomes quite onerous.
+To mediate this burden through the use of geographic information, we now turn to context-dependent environments.
+
+\section{Context-Dependent Environments}
 \label{sec:cde}
-
-We now describe the functionality of our novel context-dependent environments paradigm and assess its robustness using the case study introduced in Section~\ref{sec:tax}.
-
-While we can use regular environments to provide the parameterization flexibility of dynamic binding on-demand, 
-the CDEs we propose here are actually a strictly more powerful mechanism than dynamic binding. 
-We owe this power boost to our decoupling of the "how" and "when" to compute a parameter's value,
-allowing the "how" to be specified at binding time,
-but deferring evaluation time until the parameter is actually needed.
-This "lazy" evaluation strategy permits more parameter bindings to be in scope
-than were available at binding time, with the advantage that these
-other parameters may come from code locations not visible to the original binding site.
-
-The sole additional feature of a CDE over a regular environment is a special object, called \emph{site}, that dynamically points to the originating CDE of the parameter query:
-Figure~\ref{fig:cde-phdl}
-
-%Context dependent environments are strictly more powerful than dynamic binding, due to lazy evaluation of parameter values; this permits more in-scope parameter bindings as other parameters may come from code locations not visible to the original binding site.
-
-%With regular env's firmly established we can then extend them to CDEs by adding site. Where before the environment was a collection of keys and values, now the values have been promoted to functions which take as a parameter a dictionary representing the view of the world as seen from the query's point of origin. Upon evaluating a parameter's value, the function stored for that key in the dictionary is evaluated against the dictionary itself. Regular style environment variables are now just functions that ignore their argument (the dictionary) and blindly return a constant value, hence they are constant functions. But now fancier parameters based on formula's of existing parameters are possible: such as [area = \$ -> \$length * \$width].
-
-%Though formulaic environment variables are nice, our motivating reason for implementing CDEs w.r.t. hardware generation was allowing the top-level parameter assignment to see "geographic" information about the component executing the query so that it may dispatch to different values accordingly. This requires that components in a library built around CDEs follow the practice of placing geographic information as new parameters in the environments they produce for their children at the point where such geographic distinctions are clear. For instance, a "network" component will instantiate and wire together many child "node" components. We would like a convenient way to assign different parameter values to the nodes based on their location in the topology. To achieve this we place the burden on the parent (network) to annotate each node's inherited CDE with a constant parameter like [location = \$ -> (x,y)] so the top-level environment can tune each node's behavior according to location by referencing it in the function [foo = \$ -> ...expression dependent on \$location...].
-
-In the above example, \code{env1} is queried with the key \code{'whoami'}. 
-This key is contained within \code{env1}, and its value, \code{site('coord')}, is evaluated. 
-Because the original queried object is \code{env1}, \code{site} points to \code{env1} (implying that \code{site('coord') == env1('coord')}). 
-Since \code{env1} does not contain the key \code{'coord'}, this query fails.
-The second query, \code{env2('whoami')}, matches because \code{env2} contains a \code{'whoami'} key. 
-When \code{'whoami'}'s value is evaluated, \code{site('coord')} now points to \code{env2} (implying that \code{site('coord') == env2('coord')}). 
-Because \code{env2} contains a \code{'coord'} key, \code{site(`coord')} returns \code{'environment 2'}. 
-This return value is propagated back to the original \code{env2('whoami')} callee and printed.
-
-This \emph{site} functionality is extremely useful in the context of hardware generation because it allows for specialization based on contextual or geographic information that is injected into the generator by any intermediate node in the module hierarchy.
-This ability makes it possible to compose designs by defining parameters that depend on other parameters. Suppose we have a series of multipliers that use a parameterized coefficient. We evaluate coefficients at the top level based on the location-dependent index of the multiplier:
-Figure~\ref{fig:site-phdl}
 
 \begin{figure}
 \centering
 \begin{phdl}
 module Example :
-  env1 = {'whoami' -> (*@\textcolor[rgb]{1,0.5,0}{\textbf{\textit{site}}}@*)('coord')}
-  env2 = env1 ++ {'coord' -> 'environment 2'}
-  print env1('whoami')     // 'Error: 'coord' is not defined'
-  print env2('whoami')     // 'environment 2'
+  env1 = {'whoami' -> (*@\textcolor[rgb]{1,0.5,0}{\textbf{\textit{site}}}@*)('coord')} // CDE instantiation
+  env2 = env1 ++ {'coord' -> 'environment 2'} // CDE modification
+  print env1('whoami')                        // CDE query, prints 'Error: 'coord' is not defined'
+  print env2('whoami')                        // CDE query, prints 'environment 2'
 \end{phdl}
-\caption{Syntax for object declaration and instantiation in our HDL pseudocode.}
+\caption{Syntax for CDE instantiation and querying in our pseudo-HDL.}
 \label{fig:cde-phdl}
 \end{figure}
 
@@ -477,51 +572,111 @@ module Example :
 \centering
 \begin{phdl}
 module Top #()():
-  env1 = {'coefficient' -> if    ((*@\textcolor[rgb]{1,0.5,0}{\textbf{\textit{site}}}@*)('index') == 0) 4 
-                           elseif((*@\textcolor[rgb]{1,0.5,0}{\textbf{\textit{site}}}@*)('index') == 1) 5
-                           elseif((*@\textcolor[rgb]{1,0.5,0}{\textbf{\textit{site}}}@*)('index') == 2) 8
-                           elseif((*@\textcolor[rgb]{1,0.5,0}{\textbf{\textit{site}}}@*)('index') == 3) 9}                        
-  Mult #(env1 ++ {'index' -> 0}) m0(...)
-  Mult #(env1 ++ {'index' -> 1}) m1(...)
-  Mult #(env1 ++ {'index' -> 2}) m2(...)
-  Mult #(env1 ++ {'index' -> 3}) m3(...) ...
+  constPars = { 'coefficient' -> 4 }                                      // Constant function
+  indexPars = { 'coefficient' -> List(4,5,6,7).at((*@\textcolor[rgb]{1,0.5,0}{\textbf{\textit{site}}}@*)('index')) } // Function on 'index'
+  myHomogenousDSP   = new DSP4MultArray(constPars)     // Makes a homogenous DSP with identical coefficients
+  myHeterogenousDSP = new DSP4MultArray(indexPars)     // Makes a heterogenous DSP with unique coefficients
+module DSP4MultArray #(params)(...):
+  mult0 = new Mult #(params ++ {'index' -> 0}) m0(...) // DSP4MultArray injects the index ``location''
+  mult1 = new Mult #(params ++ {'index' -> 1}) m1(...)
+  mult2 = new Mult #(params ++ {'index' -> 2}) m2(...)
+  mult3 = new Mult #(params ++ {'index' -> 3}) m3(...) ...
 module Mult #(params)(...):
-  c = params('coefficient') ...
+  c = params('coefficient') ...                        // Mult only knows about coefficient
 \end{phdl}
 \caption{Example of specifying geographic information using site in pseudo-HDL.}
 \label{fig:site-phdl}
 \end{figure}
 
+We now describe the functionality of our novel context-dependent environments paradigm for parameterization,
+and assess its robustness using the case study introduced in the previous section.
+In the CDE paradigm, a key-value environment is passed down a hardware module hierarchy, and the value returned for each query can depend on other parameter values at that query's origin within the design.
+The encapsulation of many parameters into a single object coupled with dynamically-scoped, context-aware lookups preserves module reusability and composition, while also improving a generator's robustness to any external module hierarchy modifications.
+
+While we previously demonstrated how we can use regular environments to provide the parameterization flexibility of dynamic binding on-demand, 
+the CDEs we propose here are actually a strictly more powerful mechanism than typical dynamic binding. 
+We owe this power boost to our decoupling of the "how" and "when" to compute a parameter's value,
+allowing the "how" to be specified at binding time,
+but deferring evaluation time until the parameter is actually needed.
+This "lazy" evaluation strategy permits more parameter bindings to be in scope
+evaluation time than were available at binding time, with the advantage that these
+other parameters may come from code locations not visible to the original binding site.
+
+Mechanically, the sole additional feature of a CDE over a regular environment is a special object, called \emph{site}, that dynamically points to the originating CDE of the parameter query.
+In other words, whereas previously the environment was a collection of keys bound to values,
+now the values have been promoted to functions which take as an argument a dictionary representing the view of the world as seen from the query's point of origin.
+Upon evaluating a parameter's value, the function stored for that key in the dictionary is evaluated against the dictionary itself.
+Regular style environment variables are still possible, but now are just functions that ignore their additional argument (the dictionary) and blindly return a constant value, i.e. constant functions. 
+
+Now that every value in the environment can actually be a function of the environment that called it, we can
+build meta-parameters that are based on formulae consisting of existing parameters, e.g. \code{[area -> site(length) * site(width)]}.
+This is a powerful capability for forming chains of parameter dependencies, in which parameters can be derived from other parameters, including ones which were not known to the original generator authors.
+
+Though formulaic environment variables are useful, our true motivating reason for applying CDEs 
+to the hardware generation domain was specifically to allow the top-level parameter bindings to see "geographic" information
+about the component executing the query so that it may bind to different values accordingly.
+Exploiting this capability requires that components in a generator library built around CDEs follow the practice of placing geographic information
+as new parameters in the environments they produce for their children at the point where such geographic distinctions are clear. 
+For instance, a "network" component will instantiate and wire together many child "node" components.
+We would like a convenient way to assign different parameter values to the nodes based on their location in the topology.
+To achieve this we place the burden on the parent (network) to annotate each child (node)'s inherited CDE with a constant parameter like \code{[location -> (x,y)]}.
+With this information the top-level environment can tune each node's behavior according to location by referencing it in the function \code{[foo = \$ -> ...expression dependent on site(location)...]}.
+
+Figure~\ref{fig:cde-phdl} provides a basic example of using the CDE site functionality.
+We can see that \code{env1} is queried with the key \code{'whoami'}. 
+This key is contained within \code{env1}, and its value, \code{site('coord')}, is evaluated. 
+Because the original queried object is \code{env1}, \code{site} points to \code{env1} (i.e. \code{site('coord') == env1('coord')}). 
+Since \code{env1} does not contain the key \code{'coord'}, this query fails.
+The second query, \code{env2('whoami')}, matches because \code{env2} contains a \code{'whoami'} key. 
+When \code{'whoami'}'s value is evaluated, \code{site('coord')} now points to \code{env2} (i.e. \code{site('coord') == env2('coord')}). 
+Because \code{env2} contains a \code{'coord'} key, \code{site(`coord')} returns \code{'environment 2'}. 
+This return value is propagated back to the original \code{env2('whoami')} callee and printed.
+
+This \emph{site} functionality is particularly useful in the context of hardware generation because 
+it allows for specialization based on contextual or ``geographic'' information that was injected into the generator by any intermediate node in the module hierarchy.
+In particular, this ability makes it possible to compose designs by defining parameters that depend on ``locations'' that the original generator auther knew nothing about.
+Figure~\ref{fig:site-phdl} provides an example of this geographic specialization..
+We present an array of multipliers that use a parameterized coefficient, such as might be found in a DSP engine or FIR filter.
+The structure of the design is fixed: \code{DSP4MultArray} has four multiplers.
+However, we want to leave the binding of particular coefficients to particular multipliers up to the top level.
+If we want a homogenous set of multipliers, we can make the \code{'coefficient'} parameter a constant function.
+If we want a heterogenous set of multipliers, we can make the \code{'coefficient'} parameter a function of \code{'index'}.
 The top-level parameter assignment may dispatch different values to the same query by using the geographic information known only at the origin of the query. 
+In this case, \code{Mult} need know nothing about \code{'index'}.
+Furthermore, we can use \code{'index'} in the top-level environment even though noone has yet injected that key into the environment.
+When we finally query \code{'coefficient'} inside of \code{Mult}, \code{site} resolves to the environment where the \code{'index'} key has since been defined (in the heterogenous case).
 This example demonstrates how components in a generator library built around CDEs can leave a hook (e.g. \code{index}) by which external modules can specialize them.
 
-While the context-dependency of CDEs is a useful property for expressing heterogenous hardware, CDEs also improve on the robustness of regular environments. We return to the original example below, with the CDE \code{topPars} using \code{site} to specialize all \code{'size'} queries.
-
-We now apply both modification from Section~\ref{sec:tax} (replacing \code{Queue} with \code{PQueue} and inserting \code{CacheWithPF}):
-Figure~\ref{fig:cde}
-Figure~\ref{fig:cde-delta}
-These modifications require only two TLCs and two LCs. The CDE paradigm is qualitatively superior to all previous paradigms as it has fewer LCs and (apart from regular environments) fewer NLCs, with an equivalent number of TLCs. We formalize this assessment in the following section.
+While the context-dependent specialization provided by CDEs is a useful property for expressing heterogenous hardware, CDEs also improve on the robustness of environments
+in the face of module hierarchy modifications.
+We return to the original tile generator example in Figure~\ref{fig:cde}, with the CDE \code{topPars} using \code{site} to specialize all \code{'size'} queries.
+In Figure~\ref{fig:cde-delta} we now apply both modifications from Section~\ref{sec:tax} (i.e. replacing \code{FPU} with \code{PFPU} and inserting \code{CacheWithPF}).
+Under the CDE paradigm,these modifications require only two TLCs and two LCs.
+Using environments eliminates the constructor-related NLCs and cross-module parameter references, as before.
+Using \code{site} to specialize the cache line sizes means that we do not have to explicitly rename the \code{'size'} paramter, as we had to do for regular environments.
+This example supplies us with some intuition that the CDE paradigm is qualitatively superior to all previous paradigms.
+It has fewer LCs and (apart from regular environments) fewer NLCs, with an equivalent number of TLCs.
+We formalize this assessment in the following section.
 
 \begin{figure}
 \centering
 \begin{phdl}
 module Top #()() :
-  topPars = {'fpu?' -> true,
-             'size' -> if    ((*@\textcolor[rgb]{1,0.5,0}{\textbf{\textit{site}}}@*)('loc') == 'iCache') 256 
-                       elseif((*@\textcolor[rgb]{1,0.5,0}{\textbf{\textit{site}}}@*)('loc') == 'dCache') 512}
-  Tile #(topPars) myTile (...)
+  topPars = {'hasFpu' -> true,
+             'size' -> if    ((*@\textcolor[rgb]{1,0.5,0}{\textbf{\textit{site}}}@*)('loc') == 'iCache') 64 
+                       elseif((*@\textcolor[rgb]{1,0.5,0}{\textbf{\textit{site}}}@*)('loc') == 'dCache') 64}
+  myTile = new Tile #(topPars)(...)
 module Tile #(params)(...):
-  cPar  = params ++ {'loc' -> 'core'}   // Insert geographic location
-  Core #(cPar) myCore (...)
+  myCore = new Core #(params)(...)
   icPar = params ++ {'loc' -> 'iCache'} // Insert geographic location
-  Cache #(icPar) myIcache (...)
+  icache = new Cache #(icPar)(...)
   dcPar = params ++ {'loc' -> 'dCache'} // Insert geographic location
-  Cache #(dcPar) myDcache (...)
+  dcache = new Cache #(dcPar)(...)
   assert (icPar('size') < dcPar('size')) ...
-module Cache #(params)(...) : 
-   ... params('size') ...               // Cache queries CDE directly
-module Core  #(params)(...) :
-  Queue myIQ (...) ...
+module Cache #(params)(...):
+  ... params('size') ... // Cache queries CDE directly
+module Core #(params)(...):
+  if(params('hasFpu') myFpu = new FPU()(...) ...
 \end{phdl} 
 \caption{The same example module hierarchy, but parameterized through context-dependent environments.}
 \label{fig:cde}
@@ -531,63 +686,80 @@ module Core  #(params)(...) :
 \centering
 \begin{phdl}
 module Top :
-  topPars = {'fpu?' -> true,
+  topPars = {'hasFpu' -> true,
              (*@\textcolor[rgb]{1,0,0}{'dist' -> 16}@*),                                   // TLC
-             (*@\textcolor[rgb]{1,0,0}{'iqSize -> 32}@*),                                  // TLC
-             'size' -> if    ((*@\textcolor[rgb]{1,0.5,0}{\textbf{\textit{site}}}@*)('loc') == 'iCache') 256 
-                       elseif((*@\textcolor[rgb]{1,0.5,0}{\textbf{\textit{site}}}@*)('loc') == 'dCache') 512}           
-  Tile #(topPars) myTile (...)
+             (*@\textcolor[rgb]{1,0,0}{'fpuLat' -> 6}@*),                                  // TLC
+             'size' -> if    ((*@\textcolor[rgb]{1,0.5,0}{\textbf{\textit{site}}}@*)('loc') == 'iCache') 64 
+                       elseif((*@\textcolor[rgb]{1,0.5,0}{\textbf{\textit{site}}}@*)('loc') == 'dCache') 64}           
+  myTile = new Tile #(topPars)(...)
 module Tile (params)(...):
-  cPar = params ++ {'loc' -> 'core'}
-  Core #(cPar) myCore (...)
-  icPar = params ++ {'loc' -> 'iCache'}
-  (*@\textcolor[rgb]{1,0,0}{CacheWithPF \#(icPar) myIcache (...)}@*)                            // LC
+  myCore = new Core #(params)(...)
+  icPar = params ++ {'loc' -> 'iCache'}                                                           
+  icache = new (*@\textcolor[rgb]{1,0,0}{CacheWithPF \#(icPar)}@*)(...)                           // LC
   dcPar = params ++ {'loc' -> 'dCache'}
-  Cache #(dcPar) myDcache (...)
+  dcache = new Cache #(dcPar)(...)
   assert (icPar('size') < dcPar('size')) ...
-module Cache #(params)(...) : ... params('size') ...
-module CacheWithPF (params)(...) :
+module Cache #(params)(...):
+  ... params('size') ...
+module CacheWithPF (params)(...):
   Cache #(params)(...)        // CacheWithPF simply passes CDE
-  Prefetch #(params('dist'))(...)
 module Core (params)(...) :
-  (*@\textcolor[rgb]{1,0,0}{PQueue \#(params) myIQ (...)}@*) // Core simply passes CDE          // LC
-module PQueue #(params)(...) : ... params('size') ...
+  if(params('hasFpu') myFpu = new (*@\textcolor[rgb]{1,0,0}{PFPU \#(params)}@*)(...) // Core simply passes CDE  // LC
 \end{phdl} 
-\caption{Adding a new submodule that contains a new parameter.}
+\caption{Simultaneously appending a new submodule that contains a new parameter, while also inserting
+a new interstitial module that contains a new parameter. Dynamic environments eliminate NLCs.}
 \label{fig:cde-delta}
 \end{figure}
 
 \section{Source Code Change Analysis}
 \label{sec:scca}
 
-While Section \ref{sec:tax} and Section \ref{sec:cde} qualitatively evaluate the efficacy of all five parameterization paradigms, this section quantifies the robustness each paradigm to \textit{any possible} design modification. The results show that using CDEs \textit{always} results in a more robust design, but also provide insight into when other paradigms may be appropriate.
-
-\subsection{Methodology}
-
-As before, robustness is quantified as the number of source code changes cascading from a modification to an existing design. 
-We generalize all modifications into two categories: appends or insertions.
-An \emph{append} is when a module is instantiated but does not affect the existing module hierarchy (e.g. the addition of \code{PQueue} in Section \ref{sec:tax}).
-In contrast, an \emph{insert} is when a new module is instantiated between an existing parent and child module (e.g. the addition of \code{CacheWithPF}). 
-
 \begin{figure}
 \centering
-\epsfig{file=parameters/figures/HC.pdf, width=2.7in}
-\caption{Appending a module.}
+\epsfig{file=parameters/figures/HC.pdf, width=4in}
+\caption{Appending a module to the hierarchy.
+The module may be homogenous or heterogenous relative to its peers.}
 \label{fig:hc}
 \end{figure}
 
 \begin{figure}
 \centering
-\epsfig{file=parameters/figures/VC.pdf, width=2.7in}
-\caption{Inserting a module.}
+\epsfig{file=parameters/figures/VC.pdf, width=4in}
+\caption{Inserting a module within the hierarchy.
+The module may be homogenous or heterogenous relative to its child.}
 \label{fig:vc}
 \end{figure}
 
-Within each category, the modification is either homogenous or heterogenous depending on whether the added module's type is the same as its sibling (for appending, see Figure \ref{fig:hc}) or child (for inserting, see Figure \ref{fig:vc}). In addition, we assume all added parameters require unique values assigned in the top-level list.
+\begin{figure}
+\centering
+\epsfig{file=parameters/figures/CDSq.pdf, width = 6in}
+\caption{(1)-(4) are example module hierarchies; module types are shapes, inserted/appended modules are red, and intermodule parameter references are curved arrows (note the broken reference in (4)).}
+\label{fig:attr}
+\end{figure}
 
-Each modification will trigger a varying number of parameter-related source code changes depending the existing module hierarchy, as well as the parameterization paradigm. The following attributes of a module's modification, M, are relevant to our calculation:
+Section \ref{sec:tax} and Section \ref{sec:cde} used the case study of a tile generator to qualitatively contrast the efficacy of all five parameterization paradigms
+at dealing with some specific modifications to the structure and hierarchy of hardware generators.
+In this section we instead attempt to analytically describe the robustness of each paradigm to \textit{any possible set} of design modifications.
+The results show that using CDEs \textit{always} results in a more robust design according to our metric,
+but they also provide insight into when other paradigms could be equally appropriate.
 
-\begin{itemize}\itemsep1pt \parskip0pt \parsep0pt
+As in the previous sections, we define robustness as the number of source code changes that cascade from making a modification to an existing design
+consisting of a hierarchy of modules.
+We generalize all modifications into one of two categories: appends or insertions.
+An \emph{append} is when a new module is instantiated as a leaf node and does not affect the overall organization of the existing module hierarchy (e.g. the addition of \code{PFPU} in Section \ref{sec:tax}).
+In contrast, an \emph{insertion} is when a new module is instantiated between an existing parent and child module (e.g. the addition of \code{CacheWithPF}). 
+Insertions change the overall structure of the module hierarchy.
+Within each category, we differentiate betweeen whether the modification is homogenous or heterogenous, depending on whether the added module's type is the same as its sibling or child.
+Figure \ref{fig:hc} illustrates these distinctions for appends and Figure \ref{fig:vc} does the same for insertions.
+
+In addition, we assume all parameters added as part of a modification require unique values that are bound to the parameter names in the top-level of the module hierarchy.
+These bindings must then be brought into the scope of the place where the parameters are used.
+Therefore, each original modification will trigger a varying number of scope-related source code changes
+depending on both the existing module hierarchy as well as the parameterization paradigm being employed.
+
+In order to characterize how many source code changes of each type will be required for each modification under each paramaterization paradigm,
+we define the following attributes of a modification that introduces a new module, $M$, to the hierarchy:
+\begin{itemize}%\itemsep1pt \parskip0pt \parsep0pt
 \item $\delta$, the number of times any parent of M is instantiated
 \item $\pi$, M's number of unique parent module declarations (that is not of type M)
 \item $\mu$, whether M's immediate parent has M's type
@@ -595,21 +767,44 @@ Each modification will trigger a varying number of parameter-related source code
 \item $\rho$, the number of references to M's child's parameters from any of M's parents
 \end{itemize}
 
-Examples calculating these attributes for different module hierarchies is depicted in Figure \ref{fig:attr}.
+Figure \ref{fig:attr} depicts four examples calculating these attributes for different module hierarchies
+In (1), a new module with one parameter is heterogeneously appended to a 3-level hierarchy with each level being of a unique type.
+In (2), a module with one parameter is homogenously appended to a 3-level hierarchy with two other types of modules.
+In (3), a module with two parameters is homogenously appended to a 3-level hierarchy with two other types of modules.
+In (4), a module with two parameters is homogenously inserted into a 3-level hierarchy with two other types of parameters.
+In this case, $M$'s parent has a single reference to a parameter that is contained in $M$'s child.
 
-\begin{figure}
-\centering
-\epsfig{file=parameters/figures/CDSq.pdf, width = 3in}
-\caption{(1)-(4) are example module hierarchies; module types are shapes, inserted/appended modules are red, and intermodule parameter references are curved arrows (note the broken reference in (4)).}
-\label{fig:attr}
-\setlength{\belowcaptionskip}{-20pt}
-\end{figure}
+Given these atrributes, we can calculate the number of top-level, non-local, and local changes per modification type under each paradigm.
+Tables \ref{het:app}, \ref{hom:app}, \ref{het:ins}, and \ref{hom:ins} lay out the results.
+Top-level changes are always equal to the number of parameters added by the modification ($\theta$).
+Local changes consist of instantiating the new module and local manipulations of the module's parameter values.
+Non-local changes include any other modifications, including parent instantiations, parent declarations, or modifying any parent's parameter object's instantiation/declaration.
+Total changes are simply the sum of all LCs, NLCs, and TLCs.
 
-Given these assumptions, we calculate the number of top-level, non-local, and local changes per module addition. Top-level changes are always equal to the number of parameters added ($\theta$). Local changes consist of instantiating the new module and local manipulations of the module's parameter values. Non-local changes include any other modifications, including parent instantiations, parent declarations, or modifying any parent's parameter object's instantiation/declaration. Total changes are simply the sum of all LCs, NLCs, and TLCs.
+Table \ref{het:app} shows the overhead of heterogenously appending a new module.
+Under all paradigms, only a single LC is called for, because we simply can instantiate the new module.
+The arg-list paradigm requires $(\delta+\pi)*\theta$ NLCs, because each of $\theta$ parameters must be threaded through the declarations ($pi$) and instantiations ($\delta$) of all of its parent modules in the hierarchy.
+The flat-struct paradigm reduces this overhead to $\pi*\theta$ because the $\delta$ instantiations now refer to the struct instead of the individual parameters.
+Surprisingly, nested-struct is almost equivalent to both environment passing schemes because $\mu$ is always either 0 or 1, depending on whether the immediate parent is of the same type as the appended module.
 
-\subsection{Appends}
+For homogenous appends (Table \ref{hom:app}), CDEs are slightly better than nested-structs, while regular environments perform poorly with $\theta$ additional source-code changes.
+Table \ref{het:ins} shows that regular and CDE parameterization paradigms trigger zero NLCs,
+but insertions into designs using argument lists, flat-structs, or nested-structs can trigger large numbers of NLCs depending on the module's depth, number of unique parents, or number of cross-module parameter references.
 
-As shown in Table \ref{het:app} for heterogenous appends, both environment passing schemes require zero NLCs. Surprisingly, nested-struct is almost equivalent to both environment passing schemes because $\mu$ is always either 0 or 1, depending on whether the immediate parent is of the same type as the appended module.
+Homogeneous insertions, however, clearly show that CDEs are superior to all other paradigms (Table \ref{hom:ins}).
+Regular environment passing is hindered by the additional $\theta$ renames, while nested-structs are limited by $\rho$, number of spanning parameter references. 
+The single LC to CDEs is from modifying the parameter object's context prior to passing it to the inserted module, which is necessary to avoid the namespace renaming of regular environment passing.
+
+
+Small designs with a shallow module hierarchy (e.g. a multiplier) are manageable with argument lists because the number of modification is limited. Any other design should move to a different paradigm.
+
+Designs with shallow but wide hierarchies have few cross-module parameter references (e.g. networks) - insertions are rare and these designs are robust with nested-struct paradigms.
+
+Deep hierarchical designs with minimal module reuse have heterogeneous insertions/appends and few parameter namespace collisions (e.g. a processor). These designs will remain robust with regular environment passing.
+
+Complicated designs with deep hierarchies, significant module reuse, and many cross-module references have hetero- and homogeneous appends/insertions (e.g. SoC generator); these designs clearly benefit from CDEs.
+
+%There is little benefit to using a context-dependent environment over a normal environment when most modifications to a design are only heterogenous. Unfortunately, more complicated designs often have homogeneous structures and, in this case, context-dependent environments are significantly superior. Use CHISEL because we've implemented context-dependent environments!!
 
 \begin{table}
 \centering
@@ -617,18 +812,16 @@ As shown in Table \ref{het:app} for heterogenous appends, both environment passi
 \toprule
 Paradigm    & LC & NLC & Total Changes\\
 \midrule
-arg-lists      &  1 & ($\delta$+$\pi$)*$\theta$ & 1+$\theta$*($\delta$+$\pi$+1)  \\
-flat-struct  &  1 & $\pi$*$\theta$ &  1+$\theta$*($\pi$+1)  \\
-nested-struct    &  1 & $\mu$ &  1+$\theta$+$\mu$  \\
-regular-env    &  1 & 0 & 1+$\theta$ \\
-cde &  1 & 0 & 1+$\theta$  \\
+arg-lists      &  1 & $(\delta+\pi)*\theta$ & $1+\theta*(\delta+\pi+1)$  \\
+flat-struct  &  1 & $\pi*\theta$ &  1+$\theta$*($\pi$+1)  \\
+nested-struct    &  1 & $\mu$ &  $1+\theta+\mu$  \\
+regular-env    &  1 & 0 & $1+\theta$ \\
+cde &  1 & 0 & $1+\theta$  \\
 \bottomrule
 \end{tabular*}
 \caption{Appending a heterogenous module.}
 \label{het:app}
 \end{table}
-
-For homogenous appends (Table \ref{hom:app}), CDEs are slightly better than nested-structs, while regular environments perform poorly with $\theta$ additional source-code changes.
 
 \begin{table}
 \centering
@@ -649,7 +842,6 @@ cde &  2 & 0 & 2+$\theta$  \\
 
 \subsection{Insertions}
 
-Table \ref{het:ins} shows that regular and CDE parameterization paradigms trigger zero NLCs, but insertions into designs using argument lists, flat-structs, or nested-structs can trigger large numbers of NLCs depending on the module's depth, number of unique parents, or number of cross-module parameter references.
 
 \begin{table}
 \centering
@@ -668,7 +860,6 @@ cde &  1 & 0 & 1+$\theta$  \\
 \label{het:ins}
 \end{table}
 
-Homogeneous insertions, however, clearly show that CDEs are superior to all other paradigms (Table \ref{hom:ins}). Regular environment passing is hindered by the additional $\theta$ renames, while nested-structs are limited by $\rho$, number of spanning parameter references. 
 
 \begin{table}
 \centering
@@ -687,28 +878,15 @@ cde &  2 & 0 & 2+$\theta$  \\
 \label{hom:ins}
 \end{table}
 
-The single LC to CDEs is from modifying the parameter object's context prior to passing it to the inserted module, which is necessary to avoid the namespace renaming of regular environment passing.
-
-\subsection{Summary of Analysis}
-
-Small designs with a shallow module hierarchy (e.g. a multiplier) are manageable with argument lists because the number of modification is limited. Any other design should move to a different paradigm.
-
-Designs with shallow but wide hierarchies have few cross-module parameter references (e.g. networks) - insertions are rare and these designs are robust with nested-struct paradigms.
-
-Deep hierarchical designs with minimal module reuse have heterogeneous insertions/appends and few parameter namespace collisions (e.g. a processor). These designs will remain robust with regular environment passing.
-
-Complicated designs with deep hierarchies, significant module reuse, and many cross-module references have hetero- and homogeneous appends/insertions (e.g. SoC generator); these designs clearly benefit from CDEs.
 
 \section{Implementation}
 \label{sec:dse}
 
 We augmented Chisel by leveraging its host language, Scala, to enable any Chisel design to use CDEs. At a high level, CDE values are not constant; they are functions whose arguments are (1) the query (\code{pname}) and (2) the CDE originally queried (\code{site}). The original CDE queried implicitly passes itself with every query. Ignoring the \code{site} argument turns the CDE into a regular environment; fancier parameter values based on querying \code{site} of existing parameters are now possible. For more detail, see the open-source implementation and documentation (\url{https://github.com/ucb-bar/chisel}).
 
-%Though formulaic environment variables are nice, our motivating reason for implementing CDEs w.r.t. hardware generation was allowing the top-level parameter assignment to see "geographic" information about the component executing the query so that it may dispatch to different values accordingly. This requires that components in a library built around CDEs follow the practice of placing geographic information as new parameters in the environments they produce for their children at the point where such geographic distinctions are clear. For instance, a "network" component will instantiate and wire together many child "node" components. We would like a convenient way to assign different parameter values to the nodes based on their location in the topology. To achieve this we place the burden on the parent (network) to annotate each node's inherited CDE with a constant parameter like [location = \$ -> (x,y)] so the top-level environment can tune each node's behavior according to location by referencing it in the function [foo = \$ -> ...expression dependent on \$location...].
 
 \section{Conclusion}
 \label{sec:con}
 
 We have presented a taxonomy of existing parameterization paradigms in HDLs and demonstrated that our context-dependent environments paradigm is provably more robust in the face of modification to any given design's module hierarchy. Our implementation of CDEs within Chisel allowed us to perform a design space exploration composing multiple hardware generators, solely by changing the top-level environment.
 
-%There is little benefit to using a context-dependent environment over a normal environment when most modifications to a design are only heterogenous. Unfortunately, more complicated designs often have homogeneous structures and, in this case, context-dependent environments are significantly superior. Use CHISEL because we've implemented context-dependent environments!!
