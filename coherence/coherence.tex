@@ -1,0 +1,207 @@
+\chapter{Object-Oriented Descriptions of Cache Coherence Policies}
+\label{c.coherence}
+
+
+TileLink is a protocol designed to be a substrate for cache coherence transactions implementing a particular cache coherence policy within an on-chip memory hierarchy. 
+Its purpose is to orthogonalize the design of the on-chip network 
+and the implementation of the cache controllers from the design of the coherence protocol itself.
+Any cache coherence protocol that conforms to TileLink’s transaction structure 
+can be used interchangeably with the physical networks and cache controllers we provide.
+
+This chapter describes the API available to implementers of client caches, 
+manager caches or manager directories. 
+The abstraction provided by the API separates the concerns of the controller design
+from the concerns of the protocol design, 
+while the TileLink substrate ensures forward progress of protocol transactions. 
+By making calls against this object-oriented API, cache controller designers can
+create state machines that clearly and correctly implement metadata updates. 
+Conversely, designers of new coherence protocols are provided a framework
+within which to implement their protocol: filling out the response to each API call.
+
+Metadata objects are the fundamental abstraction used in this API.
+These objects are opaque sets of bits which are processed and mutated by the coherence policy API.
+Metadata are divided into client-side and manager-side classes,
+and any particular cache controller can store either or both types.
+
+\section{Background} 
+
+\section{Architecture} 
+
+\section{Hierarchical Translation}
+
+\section{Client Metadata} 
+
+ClientMetadata consists of a set of bits that abstracts the “state” of a certain cache block,
+w.r.t. the permissions available on that block inside this particular client cache controller.
+The metadata may also store other information about the cache block,
+for example whether it has been dirtied by a store operation.
+The complete API for ClientMetadata can be found in the scaladoc, but we provide a summary here.
+There are three types of calls that a controller can make against the API:
+permissions checks, message creations, and metadata updates.
+
+\subsection{Permissions Checks}
+
+
+These boolean functions answer questions about the permissions on a cache line, and in particular are used to determine what actions to take relative to specific memory operations.
+
+\begin{description}
+\item[isValid()]
+Is the block's data present in this cache?
+\item[isHit(op\_code: UInt)]
+Does this cache have permissions on this block sufficient to perform the specified memory op?
+If true, the controller can perform the memory operation immediately.
+\item[isMiss(op\_code: UInt)]
+Does this cache lack permissions on this block sufficient to perform the specified memory op?
+If true, the controller needs to initiate a TileLink coherence transaction using makeAcquire().
+\item[requiresAcquireOnSecondaryMiss(firstop: UInt, secondop: UInt)]
+Does a secondary miss on the block require another Acquire message?
+If true, in a controller that supports miss-under-miss transactions, initiate a second coherence transaction using makeAcquire().
+\item[requiresReleaseOnCacheControl(op\_code: UInt)]
+Does a cache control operation (e.g. a voluntary flush) require a Release message to be sent to outer memory?
+If true, the control needs to initiate a TileLink coherence transaction using makeVoluntaryRelease.
+\item[requiresVoluntaryWriteback()]
+Does an eviction caused by a capacity miss require a Release to be sent to outer memory?
+If true, the control needs to initiate a TileLink coherence transaction using makeVoluntaryWriteback.
+\end{description}
+
+
+\subsection{Message Creation}
+
+These functions return TileLink channel bundles based on the combination of current metadata state and particular memory operations.
+
+\begin{description}
+\item[makeAcquire(op\_code: UInt, client\_xact\_id: UInt, addr\_block: UInt) ]
+Constructs an Acquire message based on this metdata and a memory operation.
+\item[makeVoluntaryRelease(op\_code: UInt, client\_xact\_id: UInt, addr\_block: UInt, addr\_beat: UInt, data: UInt) ]
+Constructs a Release message based on this metadata for a cache control op.
+\item[makeVoluntaryWriteback(client\_xact\_id: UInt, addr\_block: UInt, addr\_beat: UInt, data: UInt) ]
+Constructs a Release message based on this metadata for a capacity eviction.
+\item[makeRelease(prb: Probe, addr\_beat: UInt, data: UInt) ]
+Constructs a Release message based on this metadata in order to respond to a Probe message from outer memory.
+\end{description}
+
+\subsection{Metadata Updates}
+
+These functions return new ClientMetadata objects whose internal state has been updated based on a particular coherence event or message received.
+
+\begin{description}
+\item[onHit(op\_code: UInt) ]
+New metadata after a op\_code hits this block.
+\item[onCacheControl(op\_code: UInt) ]
+New metadata after op\_code releases permissions on this block.
+\item[onProbe(incoming: Probe) ]
+New metadata after receiving a Probe message.
+\item[onGrant(incoming: Grant, pending: UInt) ]
+New metadata after receiving a Grant message in response to the pending memory operation.
+\end{description}
+
+\subsection{On Reset}
+
+We provide the ClientMetadata.onReset function to initialize any metadata storage arrays within a particular cache.
+
+\section{ManagerMetadata API} 
+
+ManagerMetadata is a set of bits that abstracts the “state” of certain cache block,
+w.r.t. the existence of copies of that block in all the client caches
+managed by this manager cache controller.
+The metadata may also store other information about the cache block,
+for example a information about its movement pattern or ownership.
+The complete API for MasterMetadata can be found in the scaladoc,
+but we provide a summary here.
+There are three types of calls that a controller can make against the API:
+permissions checks, message creations, and metadata updates.
+
+\subsection{Permissions Checks}
+
+These boolean functions answer questions about the permissions on a cache line, and in particular are used to determine what actions to take relative to specific memory operations.
+
+\begin{description}
+\item[requiresProbes(acq: Acquire) ]
+Does this Acquire require Probes to be sent to the other clients with copies?
+\item[requiresProbes(op\_code: UInt) ]
+Does this memory operation require Probes to be sent to all clients with copies?
+\item[requiresProbesOnVoluntaryWriteback() ]
+ Does an eviction caused by a capacity missed require Probes to be sent to all clients with copies?
+\end{description}
+
+\subsection{Message Creation}
+
+These functions return TileLink channel bundles to use as responses to Clients based on the combination of current metadata state and particular TileLink messages.
+
+\begin{description}
+\item[makeProbe(dst: UInt, acq: Acquire) ]
+Construct a Probe message based on this metadata in response to a particular Acquire message.
+\item[makeProbe(dst: UInt, op\_code: UInt, addr\_block: UInt) ]
+Construct a Probe message  based on this metadata in response to a particular cache control operation.
+\item[makeProbeForVoluntaryWriteback(dst: UInt, addr\_block: UInt) ]
+Construct a Probe message based on this metadata for a capacity eviction.
+\item[makeGrant(rel: ReleaseFromSrc, manager\_xact\_id: UInt) ]
+Construct an appropriate Grant message to acknowledge a Release message.
+\item[makeGrant(acq: AcquireFromSrc, manager\_xact\_id: UInt, addr\_beat: UInt, data: UInt) ]
+Construct an appropriate Grant message to acknowledge an Acquire message.
+May contain single or multiple beats of data, or just be a permissions upgrade.
+\item[makeGrant(pri: AcquireFromSrc, sec: SecondaryMissInfo, manager\_xact\_id: UInt, data: UInt) ]
+Construct an appropriate Grant message to acknowledge an Acquire message, overriding some fields
+Used to respond to secondary misses merged into this transaction.
+May contain single or multiple beats of data.
+\end{description}
+
+\subsection{Metadata Updates}
+
+These functions return new ManagerMetadata objects whose internal state has been updated based on a particular coherence event or message.
+
+\begin{description}
+\item[onRelease(incoming: ReleaseFromSrc) ]
+New metadata after receiving a Release message.
+\item[onGrant(outgoing: GrantToDst) ]
+New metadata after sending a Grant message.
+\end{description}
+
+\subsection{On Reset}
+
+We provide the ManagerMetadata.onReset function to initialize
+any metadata storage arrays within a particular cache.
+This function can also be used to generate an empty ManagerMetadata object for API 
+use within controllers that do not store any metadata (for example a bus controller).
+
+\section{Creating New Coherence Policies}
+
+We give designers planning to implement new coherence protocols several Scala traits
+containing abstract members.
+By filling in the missing functions, they can provide a complete coherence policy
+that will interoperate with our supplied cache controllers and TileLink networks.
+These functions are a superset of the previous APIs and are called from within the
+ClientMetadata and ManagerMetadata member methods.
+
+\begin{itemize}
+\item[HasCustomTileLinkMessageTypes] defines the custom, coherence-policy-defined message types, as opposed to the built-in ones. Policies must enumerate the custom messages to be sent over each channel, as well as which of them have associated data.
+\item[HasClientSideCoherencePolicy] contains all functions required for client coherence agents. Policies must enumerate the number of client states and define their permissions with respect to memory operations. Policies must fill in functions to control which messages are sent and how metadata is updated in response to coherence events.
+\item[HasManagerSideCoherencePolicy] contains all functions required for manager coherence agents. Policies must enumerate the number of manager states. Policies must fill in functions to control which Probe and Grant messages are sent and how  metadata should be updated in response to coherence events.
+\end{itemize}
+
+\section{Directory Representation}
+
+We also provide an API for accessing and maintaining directory information on the propagation of cache blocks across all the clients under the purview of a particular manager. These functions are intended to be called from within the CoherencePolicy’s functions, and abstract the details of the storage format used in the directory.
+
+\begin{itemize}
+\item[def pop(prev: UInt, id: UInt): UInt]
+Remove id from the prev set of sharers, returning a new set
+\item[def push(prev: UInt, id: UInt): UInt]
+Add id to the prev set of sharers, returning a new set
+\item[def flush: UInt]
+Provide an empty set indicating no sharers
+\item[def none(s: UInt): Bool]
+True if there are no sharers
+\item[def one(s: UInt): Bool]
+True if there is a single sharer
+\item[def count(s: UInt): UInt]
+Total count of the sharers
+\item[def next(s: UInt): UInt]
+Provide the id of the sharer that should be contacted next
+\item[def full(s: UInt): UInt]
+Provide a full bitmap of all sharers, with 1 indicating a copy.
+\end{itemize}
+
+\section{Software Control}
+
+
