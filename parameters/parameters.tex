@@ -692,7 +692,6 @@ module Top :
   myTile = new Tile #(topPars)(...)
 module Tile (params)(...):
   myCore = new Core #(params)(...)
-  icPar = params ++ {'loc' -> 'iCache'}                                                           
   icache = new (*@\textcolor[rgb]{1,0,0}{CacheWithPF}@*) #(params ++ {'loc' -> 'iCache'})(...) // LC
   dcache = new Cache #(params ++ {'loc' -> 'dCache'})(...)
   assert (icPar('size') < dcPar('size')) ...
@@ -733,17 +732,18 @@ everything will dynamically resolve to the correct value.
 
 This \emph{site} functionality is particularly useful in the context of hardware generation because 
 it allows for specialization of parameter values based on contextual or ``geographic'' information that was injected into the enviroment by any intermediate generator in the module hierarchy.
-This capability is at the heart of how we uniquify modules in a heterogenous design.
+This capability is at the heart of how we uniquify certain modules in a heterogenous design.
 Exploiting this capability requires that modules in a generator library built around the CDE paradigm follow the practice of placing geographic information
 as new parameters in the environments they produce for their child modules, at the point where such geographic distinctions are clear. 
 For instance, a network generator will instantiate and wire together the output of many router generators.
 We would like a convenient way to assign different parameter values to the routers based on their location in the topology.
-To achieve this effect, we place the burden on the parent (network) to append each child (router)'s inherited CDE with a constant parameter, e.g. \code{\{"location"~->~(x, y)\}}.
-Assuming this geographic information will be inserted into the environment by the parent,
+To achieve this effect, we place the burden on the parent generator (network) to append each child (router)'s inherited CDE with a constant parameter, e.g. \code{\{"location"~->~(x, y)\}}.
+Assuming this geographic information will be dynamically inserted into the environment by the parent,
 the top-level environment is free to tune each router's behavior according to \code{"location"}
 by referencing it in the site-based function \code{\{"route"~->~if(site("location")~==~(1, 2))~...~\}}.
 In a homogeneous system, \code{"route"} will be bound to a constant value.
-In a heterogeneous system, we will supply whatever function we please on \code{"location"}.
+In a heterogeneous system, we will supply whatever function we please on \code{"location"},
+such that the individual locations will elaborate different designs.
 
 Figure~\ref{fig:site-phdl} provides a more detailed example of geographic specialization.
 We present an array of multipliers that use a parameterized coefficient, such as might be found in a DSP engine or FIR filter.
@@ -753,9 +753,10 @@ If we want a homogenous set of multipliers, we can make the \code{'coefficient'}
 If we want a heterogenous set of multipliers, we can make the \code{'coefficient'} parameter a function of \code{'index'}.
 The top-level parameter assignment may dispatch different values to the same query by using the geographic information known only at the origin of the query. 
 In this case, \code{Mult} need know nothing about \code{'index'}.
-Furthermore, we can use \code{'index'} in the top-level environment even though noone has yet injected that key into the environment.
-When we finally query \code{'coefficient'} inside of \code{Mult}, \code{site} resolves to the environment where the \code{'index'} key has since been defined (in the heterogenous case).
-This example demonstrates how components in a generator library built around CDEs can leave a hook (e.g. \code{index}) by which external modules can specialize them.
+Furthermore, we can use \code{'index'} in the top-level environment even though no generator has yet injected that key into the environment.
+When we finally query \code{'coefficient'} inside of \code{Mult}, \code{site} resolves to an environment where the \code{'index'} key has since been defined (in the heterogenous case).
+This example demonstrates how components in a generator library built around CDEs can leave a hook (e.g. \code{index}) by which external modules can specialize them,
+and we can how this capability is based on decoupling ``how'' and ``when'' to compute a parameter's value. 
 
 While the context-dependent specialization provided by CDEs is a useful property for expressing heterogenous hardware,
 CDEs also improve on regular environments in terms of the robustness they provide in the face of module hierarchy modifications.
@@ -778,26 +779,16 @@ We formalize this qualitative assessment in the following section.
 
 \begin{figure}
 \centering
-\epsfig{file=parameters/figures/HC.pdf, width=4in}
-\caption{Appending a generator to the hierarchy.
-The generator TODO module may be homogenous or heterogenous relative to its peers.}
-\label{fig:hc}
+\epsfig{file=parameters/figures/both.pdf, width=4in}
+\caption{Appending or inserting a generator to the hierarchy.}
+\label{fig:both}
 \end{figure}
 
 \begin{figure}
 \centering
-\epsfig{file=parameters/figures/VC.pdf, width=4in}
-\caption{Inserting a module within the hierarchy.
-The module may be homogenous or heterogenous relative to its child.}
-\label{fig:vc}
-\end{figure}
-
-\begin{figure}
-\centering
-\epsfig{file=parameters/figures/CDSq.pdf, width = 5.5in}
-\caption{(1)-(4) are example module hierarchies modifications. 
-Module types are shapes, inserted/appended modules are red, and inter-module parameter references are curved arrows.
-Nnote the broken reference in (4).}
+\epsfig{file=parameters/figures/CDSq2.pdf, width = 6in}
+\caption{(1)-(6) are example module hierarchies modifications. 
+Module types are shapes, the newly inserted or appended modules are red, and inter-module parameter references are curved arrows.}
 \label{fig:attr}
 \end{figure}
 
@@ -814,161 +805,229 @@ An \emph{append} is when a new generator is incorporated as a leaf node whose in
 (e.g. the addition of \code{PFPU} in Section \ref{sec:tax}).
 In contrast, an \emph{insertion} is when a new generator is incorporated between an existing parent and child node in the hierarchy (e.g. the addition of \code{CacheWithPF}). 
 Insertions change the overall structure of the module hierarchy.
-Within each category, we differentiate betweeen whether the modification is homogenous or heterogenous, depending on whether the added module's type is the same as its sibling or child.
-Figure \ref{fig:hc} illustrates these distinctions for appends and Figure \ref{fig:vc} does the same for insertions.
+Figure \ref{fig:both} illustrates this distinction.
 
 We assume all parameters added as part of a modification each require a unique value to be bound to their identifier the top-level of the module hierarchy.
-These bindings must then be brought into the scope of the place where the parameters are evaluated.
+In other words, multiple copies of the same generator must be capable of being assigned different parameter values.
+These unique bindings must then be brought into the scope of the place where the parameters are evaluated.
 Therefore, each original modification will trigger a varying number of scoping-related source code changes,
 depending on both the existing module hierarchy as well as the parameterization paradigm being employed.
 
 In order to characterize how many source code changes of each type will be required for each class of modification under each paramaterization paradigm,
 we define the following attributes of a modification that introduces a new module, $M$, to the hierarchy:
 \begin{itemize}%\itemsep1pt \parskip0pt \parsep0pt
-\item $\delta$, the number of times any parent of $M$ is instantiated
-\item $\pi$, $M$'s number of unique parent module declarations (that are not of type $M$)
-\item $\mu$, whether $M$'s immediate parent has $M$'s type
-\item $\theta$, the number of added parameters
-\item $\rho$, the number of references to $M$'s child's parameters from any of $M$'s parents
+\item $\theta$, the number of parameters used by $M$.
+\item $\pi$, $M$'s depth in the module hierarchy.
+\item $\delta$, the number of times any parent generator of $M$ is instantiated.
+\item $\mu$, whether any other instances of $M$'s type exist.
+\item $\rho$, the number of references to $M$'s children's parameters from any of $M$'s parents.
 \end{itemize}
 
-Figure \ref{fig:attr} depicts four examples calculating these attributes for different module hierarchies
-In (1), a new module with one parameter is heterogeneously appended to a 3-level hierarchy with each level being of a unique type.
-In (2), a module with one parameter is homogenously appended to a 3-level hierarchy with two other types of modules.
-In (3), a module with two parameters is homogenously appended to a 3-level hierarchy with two other types of modules.
-In (4), a module with two parameters is homogenously inserted into a 3-level hierarchy with two other types of parameters.
+Figure \ref{fig:attr} depicts six examples calculating these attributes for different module hierarchies
+In (1), a new module $M$ with one parameter is appended to a 3-level hierarchy with each level being of a unique type.
+In (2), a module with one parameter is appended to a 3-level hierarchy where one of its parents is instantiated twice ($\delta = 4$).
+In (3), a module with two parameters is appended to a 3-level hierarchy with a cross-module reference ($\theta = 2, \rho = 0$).
+In (4), a module with two parameters is inserted into a 3-level hierarchy with a cross-module reference ($\rho = 1$).
 In this case, $M$'s parent has a single reference to a parameter that is contained in $M$'s child.
+In (5), a module with two parameters is appended to a 1-level hierarchy alongside a sibling of a different type than $M$ ($\mu = 0$).
+In (6), a module with two parameters is appended to a 1-level hierarchy alongside a sibling that is the same type as $M$ and therefore uses the same parameter names internally ($\mu = 1$).
+
+\begin{table}
+\centering
+\begin{tabular}{llll}
+\toprule
+Paradigm    & LC & NLC & Total Changes\\
+\midrule
+arg-lists      &  1              & $(\delta+\pi)*\theta$ & $1+\theta*(\delta+\pi+1)$  \\
+flat-struct    &  1              & $\pi*\theta$          & $1+\theta*(\pi+1)$  \\
+nested-struct  &  1              & $1+\rho$              & $2+\theta+\rho$  \\
+regular-env    &  $1+\mu*\theta$ & 0                     & $1+\theta*(1+\mu)$ \\
+cde            &  $1+\mu$        & 0                     & $1+\theta+\mu$  \\
+\bottomrule
+\end{tabular}
+\caption{Source code change models for appending or inserting a module under any parameterization paradigm.}
+\label{tab:limit}
+\end{table}
 
 Given these atrributes, we can calculate the number of top-level, non-local, and local changes per modification type under each paradigm.
-Tables \ref{het:app}, \ref{hom:app}, \ref{het:ins}, and \ref{hom:ins} lay out the results.
+Table \ref{tab:limit} lays out analytical models for each combination.
 Top-level changes are always equal to the number of parameters added by the modification ($\theta$).
-Local changes consist of instantiating the new module and local manipulations of the module's parameter values.
-Non-local changes include any other modifications, including parent instantiations, parent declarations, or modifying any parent's parameter object's instantiation/declaration.
+Local changes consist of instantiating the new module and local manipulations of the module's parameter bindings.
+Non-local changes include any other modifications, including parent instantiations, parent declarations, modifying any parent's parameter object's instantiation/declaration,
+and correcting references to parameters in parent modules.
 Total changes are simply the sum of all LCs, NLCs, and TLCs.
 
-Table \ref{het:app} shows the overhead of heterogenously appending a new module.
-Under all paradigms, only a single LC is called for, because we simply can instantiate the new module.
-The arg-list paradigm requires $(\delta+\pi)*\theta$ NLCs, because each of $\theta$ parameters must be threaded through the declarations ($pi$) and instantiations ($\delta$) of all of its parent modules in the hierarchy.
+We begin by breaking down the NLCs required under each paradigm.
+The arg-list paradigm requires $(\delta+\pi)*\theta$ NLCs, because each of $\theta$ parameters must be threaded through the declarations ($\pi$) and instantiations ($\delta$) of all of its parent modules in the hierarchy.
 The flat-struct paradigm reduces this overhead to $\pi*\theta$ because the $\delta$ instantiations now refer to the struct instead of the individual parameters.
-Surprisingly, nested-struct is almost equivalent to both environment passing schemes because $\mu$ is always either 0 or 1, depending on whether the immediate parent is of the same type as the appended module.
+The nested-struct paradigm requires only $1+\rho$ changes; a single change to the declaration of the parent module's companion struct, as well as $\rho$ changes based on how many
+references to parameters in $M$'s children there are in all of $M$'s parents.
+If were are appending $M$ rather than inserting it, $\rho$ will of course equal 0 because there cannot be an references to non-existant children.
+The dynamically-scoped solutions require no NLCs because the bindings created by the TLC are automatically put within the scope of $M$.
 
-For homogenous appends (Table \ref{hom:app}), CDEs are slightly better than nested-structs, while regular environments perform poorly with $\theta$ additional source-code changes.
-Table \ref{het:ins} shows that regular and CDE parameterization paradigms trigger zero NLCs,
-but insertions into designs using argument lists, flat-structs, or nested-structs can trigger large numbers of NLCs depending on the module's depth, number of unique parents, or number of cross-module parameter references.
+As for LCs, the lexically-scoped paradigms each only require a single LC, simply instantiating the module in question.
+In the case of the dynamic environments, more than one LC is needed to both instantiate the module and differentiate the parameter bindings if necessary.
+In particular, we use $\mu$ to indicate whether $M$ is instantiated anywhere else in the design hierarchy.
+If it is, we must now differentiate the top-level bindings that are to be used for each instance of $M$, and re-map those bindings onto the identifiers used
+within $M$ as we instantiate it.
+For regular environments, we introduce $\theta$ additonal LCs, because every new parameter needs to be renamed in order to disambiguate it from that of its peers.
+For context-dependent environments, only a single additional LC is required, assuming the existence of a single geographical parameter whose value can be overridden for the new module.
 
-Homogeneous insertions, however, clearly show that CDEs are superior to all other paradigms (Table \ref{hom:ins}).
-Regular environment passing is hindered by the additional $\theta$ renames, while nested-structs are limited by $\rho$, number of spanning parameter references. 
-The single LC to CDEs is from modifying the parameter object's context prior to passing it to the inserted module, which is necessary to avoid the namespace renaming of regular environment passing.
+The terms in these models help to clarify the kinds of tradeoffs we are making when we offer developers the opportunity or advice to use a particular parameterization paradigm.
+For example, from the perspective of the author of a generator that will serve as the ``leaf'' node in the hierarchical graph of instantiations, there is no reason not to use argument lists.
+However, as that generator becomed embedded within deeper and deeper generator hierarchies, the burden born by all the parent generators grows and grows, as captured by the $\pi$ term.
+In fact, $\delta$ has an even larger potential to grow, since it is based on the number of different instantiations made anywhere in the source code,
+rather than the number of parent generator constructor declarations represented by $\pi$.
+The $\rho$ term governing nested-structs is highly design dependent, but is an important signifier of the work that has been done within a design to ensure composability
+by making assertions about the behavior and configuration of child generators.
+In other words, more robust nested designs will have higher values of $\rho$.
+The $\mu$ term captures whether the module being added is resuing parameter identifiers that are being used elsewhere.
+It only matters for dynamically-scoped paradigms because they must provide their own namespaces for identifiers, independent of the module hierarchy's lexcical scope.
+In cases where we are heterogenously adding an instance of a new module type, or homogenously adding an identical instantiation of an existing module type, no further work needs to be done.
+Otherwise, each parameter must be uniquified as the module is instantiated.
+Overall, we are making an argument that the $\delta$, $\pi$, and $\rho$ terms are the ones most likely to grow,
+as well as the fact that NLCs are much more difficult to resolve than LCs because they could occur anywhere in the overall source codebase.
 
+Despite the poor scalability of argument lists, all designs with a shallow module hierarchy are manageable with them because the number of potential modifications is itself limited. 
+Designs with shallow but wide hierarchies that have expect no insertions and have few cross-module parameter references (e.g. networks) could be made robust the with nested-struct paradigm,
+assuming the number of child parameters is not itself determined by a parameter.
+Deep hierarchical designs with minimal module reuse (e.g. processor pipelines) must support insertions as well as appends, but the diversity of the module types involved means there will be few parameter namespace collisions. These designs will remain robust with regular environment passing.
+Complicated designs with deep hierarchies, significant module reuse, and many cross-module references that must address all flavors of appends and insertions (such as our SoC generator) clearly benefit from CDEs.
 
-Small designs with a shallow module hierarchy (e.g. a multiplier) are manageable with argument lists because the number of modification is limited. Any other design should move to a different paradigm.
-
-Designs with shallow but wide hierarchies have few cross-module parameter references (e.g. networks) - insertions are rare and these designs are robust with nested-struct paradigms.
-
-Deep hierarchical designs with minimal module reuse have heterogeneous insertions/appends and few parameter namespace collisions (e.g. a processor). These designs will remain robust with regular environment passing.
-
-Complicated designs with deep hierarchies, significant module reuse, and many cross-module references have hetero- and homogeneous appends/insertions (e.g. SoC generator); these designs clearly benefit from CDEs.
-
-%There is little benefit to using a context-dependent environment over a normal environment when most modifications to a design are only heterogenous. Unfortunately, more complicated designs often have homogeneous structures and, in this case, context-dependent environments are significantly superior. Use CHISEL because we've implemented context-dependent environments!!
-
-\begin{table}
-\centering
-\begin{tabular*}{0.45\textwidth}{lccl}
-\toprule
-Paradigm    & LC & NLC & Total Changes\\
-\midrule
-arg-lists      &  1 & $(\delta+\pi)*\theta$ & $1+\theta*(\delta+\pi+1)$  \\
-flat-struct  &  1 & $\pi*\theta$ &  1+$\theta$*($\pi$+1)  \\
-nested-struct    &  1 & $\mu$ &  $1+\theta+\mu$  \\
-regular-env    &  1 & 0 & $1+\theta$ \\
-cde &  1 & 0 & $1+\theta$  \\
-\bottomrule
-\end{tabular*}
-\caption{Appending a heterogenous module.}
-\label{het:app}
-\end{table}
-
-\begin{table}
-\centering
-\begin{tabular*}{0.45\textwidth}{lccl}
-\toprule
-Paradigm    & LC & NLC &Total Changes\\
-\midrule
-arg-lists      &  1 & ($\delta$+$\pi$)*$\theta$ & 1+$\theta$*($\delta$+$\pi$+1)  \\
-flat-struct  &  1 & $\pi$*$\theta$ & 1+$\theta$*($\pi$+1)  \\
-nested-struct    &  1 & $\mu$ & 1+$\theta$+$\mu$  \\
-regular-env    &  1+$\theta$ & 0 & 1+$\theta$*2 \\
-cde &  2 & 0 & 2+$\theta$  \\
-\bottomrule
-\end{tabular*}
-\caption{Appending a homogenous module.}
-\label{hom:app}
-\end{table}
-
-\begin{table}
-\centering
-\begin{tabular*}{0.45\textwidth}{lccl}
-\toprule
-Paradigm    & LC & NLC & Total Changes\\
-\midrule
-arg-lists      &  1 & ($\delta$+$\pi$)*$\theta$ & 1+$\theta$*($\delta$+$\pi$+1)  \\
-flat-struct  &  1 & $\pi$*$\theta$ & 1+$\theta$*($\pi$+1)  \\
-nested-struct    &  1 & $\rho$+$\mu$ & 1+$\theta$+$\rho$+$\mu$  \\
-regular-env    &  1 & 0&1+$\theta$ \\
-cde &  1 & 0 & 1+$\theta$  \\
-\bottomrule
-\end{tabular*}
-\caption{Inserting a heterogenous module.}
-\label{het:ins}
-\end{table}
-
-\begin{table}
-\centering
-\begin{tabular*}{0.45\textwidth}{lccl}
-\toprule
-Paradigm    & LC & NLC & Total Changes\\
-\midrule
-arg-lists      &  1 & ($\delta$+$\pi$)*$\theta$& 1+$\theta$*($\delta$+$\pi$+1)  \\
-flat-struct  &  1 & $\pi$*$\theta$ & 1+$\theta$*($\pi$+1)  \\
-nested-struct    &  1 & $\rho$+$\mu$ & 1+$\theta$+$\rho$+$\mu$  \\
-regular-env    &  1+$\theta$ & 0 & 1+$\theta$*2 \\
-cde &  2 & 0 & 2+$\theta$  \\
-\bottomrule
-\end{tabular*}
-\caption{Inserting a homogenous module.}
-\label{hom:ins}
-\end{table}
-
+This analysis is predicated on the idea that the design in question will undergo further development and be deployed in new contexts,
+but that agenda is central to our agile approach to hardware development.
+The qualitative benefits of using CDEs extend beyond modifiability to composability and reusability.
+While there are some disadvantages to using them as well, we discuss how these can be mitigated through good software engineering practices in the following sections.
 
 \section{Implementation of CDEs in Scala}
 \label{sec:impl}
 
-We augmented Chisel by leveraging its host language, Scala, to enable any Chisel design to use CDEs. 
+We will now provide some specifics about our implementation of Context-Dependent Environments in Scala.
+After an overview of functionality offered by our CDE implementation, we will discuss the Scala language features we employed to create it,
+as well as provide some insights into how we integrate CDEs with Chisel.
 
-At a high level, CDE values are not constant; they are functions whose arguments are 
-(1) the query (\code{pname}) and 
-(2) the CDE originally queried (\code{site}). 
-The original CDE queried implicitly passes itself with every query. 
-Ignoring the \code{site} argument turns the CDE into a regular environment; fancier parameter values based on querying \code{site} of existing parameters are now possible. 
+At a high level, the values returned by identifiers stored in a CDE are not constant, rather they are functions whose arguments are:
+\begin{description}
+\item[pname,] the name of the parameter being queried.
+\item[site,] the CDE against which the query was originally made.
+\item[here,] the CDE currently being defined.
+\end{description}
+The function bound to a particular identifier can choose to ignore the \code{site} or  \code{here} argument and just return a constant value,
+which provides the same functionality that would be found in a regular environment.
+However, the use of more sophisticated parameter valuations based on querying \code{site} 
+allows users to create chains of parameter dependencies and easily specialize deeply nested portions of our design.
+Scala provides some language features that significantly informed our implementation of this construct,
+particularly first-class functions and partial functions, as well as typed dispatch via match statements.
 
 \subsection{Environments as Partial Functions}
 
-Lookup by \code{pname}.
-Any type, e.g. matching on su
+\begin{figure}
+\centering
+\begin{scala}
+val fraction: PartialFunction[Int, Int] =
+  { case d: Int if d != 0 => 42 / d }
 
-Return values.
-Any type,
-Field syntax for convenience.
+val statusHandler: Int => String = {
+  case 200 => "Okay"
+  case 400 => "Your Error"
+  case 500 => "Our error"
+}
 
-Matching order.
+\end{scala} 
+\caption{Partial functions in Scala.}
+\label{fig:pf}
+\end{figure}
 
-Composablity.
+At an abstract level, environments are associative arrays (also called key-value stores, maps, or dictionaries) wherein identifiers are bound to particular values.
+Scala provides a \code{map} collection as part of its standard collections library, but we chose to use an even more fundamental built-in primitive as the basis of our CDE implementation:
+partial functions.
+In a mathematical context, a partial function provides a function  $f: X' \rightarrow Y$ for some subset $X'$ of $X$. If $X' = X'$ we would call $f$ a total function.
+The critical feature of a partial function is that we can define it without knowing the exact domain $X'$.
+
+Scala provides first class support for functions (and partial functions), meaning that they are not only declared and invoked 
+but can be used in every segment of the language as just another data type. 
+A first-class function may be~\cite{swartz2014learning}:
+\begin{itemize}
+\item created in literal form without ever having been assigned an identifier.
+\item stored in a container such as a value, variable, or data structure.
+\item used as a parameter to a nother function or used as the return value from another function.
+\end{itemize}
+Figure~\ref{fig:pf} shows some examples of partial functions defined as function literals.
+
+The applicability to maps is obvious, and in fact Scala provides built-in functionality for converting between these data structures and first class partial function types.
+Our CDEs are built by composing hierarchies of partial functions that map from an identifier (called \code{pname}) to a parameter value (or Scala object created using multiple parameters).
+Our framework is very permissive about what Scala objects can be used as a \code{pname}, accepting \code{Any} Scala type.
+We can than use the pattern matching tools built in to Scala to match certain parameter names and extract additional information that may be stored in them.
+Figure~\ref{fig:paramspf} provides some examples of making use of different types of identifiers.
+We provide the \code{Field} base class to improve the syntax for looking up a particular \code{pname}, as well as
+leverage the Scala type system to check that indentifiers from different projects to do not conflict.
+
+\begin{figure}
+\centering
+\begin{scala}
+
+val config: PartialFunction[String, Any] = {
+  case "size" => 32
+  case "name" => "divider"
+  case "func" => fraction
+}
+
+class Location(x: Int, y: Int) extends Field[Int]
+
+val config: PartialFunction[Any, Any] = {
+  case Location(x, y) if x == 0 => 1
+  case Location(x, y) if x != 0 => 2
+}
+  
+\end{scala} 
+\caption{Using partial functions for parameterization.}
+\label{fig:paramspf}
+\end{figure}
+
+The values returned by our framework can also be of \code{Any} Scala type.
+The framework uses the type specified in the \code{Field} definition 
+or the one provided by the user at the query site
+to dynamically cast the value obtained from the environment to the intended type.
+This cast can fail if the wrong type of object is provided, an inherent weakness of our dynamic scoping approach.
+
+Partial functions can naturally be composed with one another. If an identifier fails to match
+within a certain context, we can catch the \code{MatchError} thrown and then go on to search
+in the remaining ones.
+We exploit this functionality to create hierarchies of environments,
+where modifing a parent creates a child with new bindings that
+can override the parents, while in the absence of new bindings fall back on the parent's bindings.
 
 \subsection{site}
 
-parameters that depend on each other:
+\begin{figure}
+\centering
+\begin{scala}
+  
+val params = Parameters.empty
+
+val tileParameters = parameters.alter(
+  (key, site) => { 
+    case 'width' => 64 
+  }) 
+
+\end{scala} 
+\caption{Using partial functions for parameterization.}
+\label{fig:paramspf}
+\end{figure}
+
+As discussed in the previous section, the sole additional feature of a CDE over a regular environment is a special object,
+called \emph{site}, that dynamically points to the originating CDE of the parameter query.
+\emph{site} is available to be queried when defining the value bound to a particular identifier.
+In other words, environment values bound within the environment are no longer mere literals, instead
+they have been promoted to functions which take as an argument a dictionary representing the view of the world as seen from the query's point of origin.
+When the environment is asked to evaluate a particular parameter identifier, the function stored for that key in the dictionary is evaluated against the dictionary itself.
+We call parameters that use the \emph{site} functionality {\em context-dependent} because the valuations taken by their bindings depend on where the query is made.
+
+We can
+
 derivation, and
 geography
+here
 
 \subsection{Constraints}
 
@@ -983,7 +1042,12 @@ Additional constraints in: for DSE.
 
 Configurations as scala objects
 
-\section{Parameterization Best Practices In Scala}
+\section{Parameterization Best Practices In Chisel}
+
+The goal of this section is to distill some learned wisdom about effective software engineering strategies
+for deploying CDEs in a Chisel-based generator.
+Beyond which paradigm to use, there are additionally a wide variety of design decisions that go into injecting parameters into a design,
+and I would like to capture some of the tradeoffs we have explored while taping out chips using our SoC generator.
 
 \subsection{Scala's Implicit Parameter Lists}
 
@@ -996,6 +1060,10 @@ Configurations as scala objects
 \subsection{Composing Configurations}
 
 \subsection{Dealing with Heterogeneity}
+
+\subsection{Deeply Nested Bundles}
+
+Store Data Queue example.
 
 \section{Discussion and Future Work}
 \label{sec:con}
