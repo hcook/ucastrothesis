@@ -21,7 +21,7 @@ deps += parameters/parameters.tex
 cleans += parameters/parameters.aux
 
 # Chapter Three
-deps += tilelink/tilelink.tex
+deps += tilelink/tilelink.tex tilelink/memopcodes.tex
 cleans += tilelink/tilelink.aux
 
 
