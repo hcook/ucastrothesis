@@ -48,8 +48,44 @@
 \usepackage{booktabs}
 \usepackage{url}
 \usepackage{mdwlist}
+\usepackage{array}
+\usepackage{multirow}
 \def\code#1{{\tt #1}}
 \include{scala}
+
+% New column types to use in tabular environment for instruction formats.
+% Allocate 0.18in per bit.
+\newcolumntype{I}{>{\centering\arraybackslash}p{0.18in}}
+% Two-bit centered column.
+\newcolumntype{W}{>{\centering\arraybackslash}p{0.36in}}
+% Three-bit centered column.
+\newcolumntype{F}{>{\centering\arraybackslash}p{0.54in}}
+% Four-bit centered column.
+\newcolumntype{Y}{>{\centering\arraybackslash}p{0.72in}}
+% Five-bit centered column.
+\newcolumntype{R}{>{\centering\arraybackslash}p{0.9in}}
+% Six-bit centered column.
+\newcolumntype{S}{>{\centering\arraybackslash}p{1.08in}}
+% Seven-bit centered column.
+\newcolumntype{O}{>{\centering\arraybackslash}p{1.26in}}
+% Eight-bit centered column.
+\newcolumntype{E}{>{\centering\arraybackslash}p{1.44in}}
+% Ten-bit centered column.
+\newcolumntype{T}{>{\centering\arraybackslash}p{1.8in}}
+% Twelve-bit centered column.
+\newcolumntype{M}{>{\centering\arraybackslash}p{2.2in}}
+% Sixteen-bit centered column.
+\newcolumntype{K}{>{\centering\arraybackslash}p{2.88in}}
+% Twenty-bit centered column.
+\newcolumntype{U}{>{\centering\arraybackslash}p{3.6in}}
+% Twenty-two-bit centered column.
+\newcolumntype{L}{>{\centering\arraybackslash}p{3.96in}}
+% Twenty-five-bit centered column.
+\newcolumntype{J}{>{\centering\arraybackslash}p{4.5in}}
+
+\newcommand{\instbit}[1]{\mbox{\scriptsize #1}}
+\newcommand{\instbitrange}[2]{~\instbit{#1} \hfill \instbit{#2}~}
+\newcommand{\reglabel}[1]{\hfill {\tt #1}\hfill\ }
 
 \begin{document}
 \ssp % single spacing
@@ -103,6 +139,7 @@ This dissertation was typeset using the
 \include{intro/intro}
 \include{parameters/parameters}
 \include{tilelink/tilelink}
+\include{tilelink/memopcodes}
 \include{coherence/coherence}
 \bibliography{thesis}{}
 \end{document}
