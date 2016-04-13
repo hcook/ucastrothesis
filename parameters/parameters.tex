@@ -84,13 +84,15 @@ Traditional hardware description languages have lacked the language features to 
 Section \ref{sec:tax} will discuss how specific existing parameterization paradigms in Verilog, VHDL, SystemVerilog and Bluespec SystemVerilog limit design modifiability and customizability.
 However, because the outputs of our generators will be fully elaborated designs with parameter values  automatically embedded in them,
 we can free generator authors from the constraints of the backend language with respect to choice of parameterization paradigm.
-This approach also allows us to supply parameter bindings from external tools at hardware generation time.
-There are several different times during the hardware elaboration process where we might decide to supply parameter values, and in particular this chapter will discuss tradeoffs between
+This approach also allows us to supply parameter bindings from external tools at hardware generation time,
+which is a critical featurs for design space exploration~\cite{shacham2011chip}.
+It is important to note that there are several different times during the hardware elaboration process where
+we might decide to supply parameter values, and in particular this chapter will discuss tradeoffs between
 binding parameters to values at generator compile-time as opposed to generator run-time.
 
 How parameters are expressed and referenced within and among generators is another important design question.
 From the perspective of the author of a hardware generator, it is impossible to know the full context in which the components created by their generator will be instantiated.
-Their goal of the author of a hardware generator is to expose as many parameters as they possibly can to the user (e.g. an SoC architect),
+The goal of the author of a hardware generator is to expose as many parameters as they possibly can to the user (e.g. an SoC architect),
 while also recording any constraints the internals of the design put on those parameters' values.
 Our parameterization paradigm must also accept constraints that are imposed by parent modules on their children, in the service of interoperability,
 or by completely external tools, in the service of design space exploration.
@@ -103,7 +105,7 @@ is an essential requirement for using it to support customizable cache coherence
 
 Given the limitations of extant HDLs, adopting new ones with first class support for meta-programming (and thereby parameterization)
 is critical to our hardware design methodology.
-Chapter 3 of ~\cite{shacham2011chip} provides additional discussion of the 
+Chapter 3 of~\cite{shacham2011chip} provides additional discussion of the 
 parameterization advantages related to meta-programming
 in the context of Genesis2, a next-generation HDL embedded in perl.
 We include a comparison with Genesis2's perl-based dynamic parameterization paradigm in Section \ref{sec:env}.
@@ -138,7 +140,7 @@ the context-dependent environments we propose here are actually a strictly more 
 In general, taking advantage of later-binding solutions enables both more concise uniquification of elements of nested, heterogenous systems~\cite{shacham2011chip},
 and also allows us to more robustly deal with modifications to the hierarchy of generated modules.
 The following taxonomy illustrates how selectively deploying our dynamic scoping solution is the best fit for hardware generation
-by contrasting it with several lexically-scoped solutions.
+by contrasting it with other lexically- and dynamically-scoped solutions.
 
 \section{Taxonomy of Parameterization Paradigms}
 \label{sec:tax}
@@ -156,7 +158,7 @@ The three paradigms we contrast in this section are:
 
 We do not consider some other simple alternative parameterization solutions, such as a flat namespace of global constants, because such implementations lack composability and reuseability.
 Firstly, without a mechanism to manage namespace collisions between different third-party generators, composing generators without having to modify their internals becomes impossible.
-Secondly, without a mechanism that allows designers to override parameter values within certain subsets of the module hierarchy, creating heterogenous systems where the same genereator
+Secondly, without a mechanism that allows designers to override parameter values within certain subsets of the module hierarchy, creating heterogenous systems where the same generator
 produces differently parameterized output becomes impossible.
 For these reasons we only contrast the aforementioned three paradigms, as they support both design goals in their own ways.
 
@@ -904,18 +906,19 @@ While there are some disadvantages to using them as well, we discuss how these c
 
 We will now provide some specifics about our implementation of Context-Dependent Environments in Scala.
 After an overview of functionality offered by our CDE implementation, we will discuss the Scala language features we employed to create it,
-as well as provide some insights into how we integrate CDEs with Chisel.
+as well as provide some insights into how we integrate CDEs with Chisel-based hardware generators.
 
 At a high level, the values returned by identifiers stored in a CDE are not constant, rather they are functions whose arguments are:
 \begin{description}
 \item[pname,] the name of the parameter being queried.
 \item[site,] the CDE against which the query was originally made.
 \item[here,] the CDE currently being defined.
+\item[up,] the last CDE created before this alteration.
 \end{description}
-The function bound to a particular identifier can choose to ignore the \code{site} or  \code{here} argument and just return a constant value,
+The function bound to a particular identifier can choose to ignore the \code{site}, \code{here} and \code{up} arguments and just return a constant value,
 which provides the same functionality that would be found in a regular environment.
-However, the use of more sophisticated parameter valuations based on querying \code{site} 
-allows users to create chains of parameter dependencies and easily specialize deeply nested portions of our design.
+However, the use of more sophisticated parameter valuations based on querying \code{site} and the others
+allows users to create chains of parameter dependencies and easily specialize deeply nested portions of their designs.
 Scala provides some language features that significantly informed our implementation of this construct,
 particularly first-class functions and partial functions, as well as typed dispatch via match statements.
 
@@ -933,6 +936,12 @@ val statusHandler: Int => String = {
   case 500 => "Our error"
 }
 
+val config: PartialFunction[String, Any] = {
+  case "size" => 32
+  case "name" => "divider"
+  case "func" => fraction
+}
+
 \end{scala} 
 \caption{Partial functions in Scala.}
 \label{fig:pf}
@@ -941,7 +950,7 @@ val statusHandler: Int => String = {
 At an abstract level, environments are associative arrays (also called key-value stores, maps, or dictionaries) wherein identifiers are bound to particular values.
 Scala provides a \code{map} collection as part of its standard collections library, but we chose to use an even more fundamental built-in primitive as the basis of our CDE implementation:
 partial functions.
-In a mathematical context, a partial function provides a function  $f: X' \rightarrow Y$ for some subset $X'$ of $X$. If $X' = X'$ we would call $f$ a total function.
+In a mathematical context, a partial function provides a function  $f: X' \rightarrow Y$ for some subset $X'$ of $X$. If $X' = X$ we would call $f$ a total function.
 The critical feature of a partial function is that we can define it without knowing the exact domain $X'$.
 
 Scala provides first class support for functions (and partial functions), meaning that they are not only declared and invoked 
@@ -954,128 +963,464 @@ A first-class function may be~\cite{swartz2014learning}:
 \end{itemize}
 Figure~\ref{fig:pf} shows some examples of partial functions defined as function literals.
 
-The applicability to maps is obvious, and in fact Scala provides built-in functionality for converting between these data structures and first class partial function types.
-Our CDEs are built by composing hierarchies of partial functions that map from an identifier (called \code{pname}) to a parameter value (or Scala object created using multiple parameters).
-Our framework is very permissive about what Scala objects can be used as a \code{pname}, accepting \code{Any} Scala type.
+The applicability to maps is obvious, and in fact Scala provides built-in functionality for converting between map data structures and first class partial function types.
+Our CDEs are built on top of this capability by composing hierarchies of partial functions that map from an identifier.
+to a parameter value (or Scala object created using multiple parameters).
+Our framework is very permissive about what Scala objects can be used as an identifier, accepting \code{Any} Scala type.
 We can than use the pattern matching tools built in to Scala to match certain parameter names and extract additional information that may be stored in them.
-Figure~\ref{fig:paramspf} provides some examples of making use of different types of identifiers.
-We provide the \code{Field} base class to improve the syntax for looking up a particular \code{pname}, as well as
-leverage the Scala type system to check that indentifiers from different projects to do not conflict.
+Figure~\ref{fig:paramspf} provides some examples of making use of different types of identifiers and alterations.
 
 \begin{figure}
 \centering
 \begin{scala}
+val p1 = Parameters.empty.alter("a" -> 1)
+val a = p1[Int]("a")
 
-val config: PartialFunction[String, Any] = {
-  case "size" => 32
-  case "name" => "divider"
-  case "func" => fraction
-}
+val p2 = p1.alterPartial({"b" => 2})
+val b = p2[Int]("b")
 
-class Location(x: Int, y: Int) extends Field[Int]
+case class Location(x: Int, y: Int) extends Field[String]
 
-val config: PartialFunction[Any, Any] = {
-  case Location(x, y) if x == 0 => 1
-  case Location(x, y) if x != 0 => 2
-}
-  
+val p3 = p2.alterPartial({
+  case Location(x, 1) => "y is 1, x is " + x
+  case Location(1, y) => "x is 1, y is " + y
+})
+
+val s = p3(Location(0,1))
 \end{scala} 
-\caption{Using partial functions for parameterization.}
+\caption{Using partial functions and maps to bind parameter values.}
 \label{fig:paramspf}
 \end{figure}
+
+We provide the \code{Field} wrapper class to improve the syntax for looking up a particular identifier, 
+allowing us to elide declaring the expected return type on each lookup of the identifier.
+By giving the identifier its own Scala class, we also can leverage the Scala type system to check that indentifiers from different projects to do not conflict.
 
 The values returned by our framework can also be of \code{Any} Scala type.
 The framework uses the type specified in the \code{Field} definition 
 or the one provided by the user at the query site
 to dynamically cast the value obtained from the environment to the intended type.
-This cast can fail if the wrong type of object is provided, an inherent weakness of our dynamic scoping approach.
+This cast can fail at runtime if the wrong type of object is provided, an inherent weakness of our dynamic scoping approach.
 
 Partial functions can naturally be composed with one another. If an identifier fails to match
 within a certain context, we can catch the \code{MatchError} thrown and then go on to search
 in the remaining ones.
 We exploit this functionality to create hierarchies of environments,
-where modifing a parent creates a child with new bindings that
-can override the parents, while in the absence of new bindings fall back on the parent's bindings.
+where modifing a parent creates a child with new bindings that can override the parent's bindings,
+while in the absence of new bindings fall back on the parent's bindings.
 
-\subsection{site}
+\subsection{site, here and up}
+
+\begin{figure}
+\centering
+\begin{scala}
+val p1 = Parameters.empty
+
+val p2 = p1.alter(
+  (key, site, here, up) => key match { 
+    case "width" => 64
+    case "double" => here("width") * 2  // here reference
+    case "hetero" => site("loc") match {
+      case Location(x, 1) => "In core location #" + x
+      case Location(y, 2) => "In uncore location #" + y
+    }
+  }
+) 
+
+val core1 = Module(new Core(p2.alter("loc" -> Location(1,1))))
+val core2 = Module(new Core(p2.alter("loc" -> Location(2,1))))
+val uncore = Module(new Uncore(p2.alter("loc" -> Location(1,2))))
+
+\end{scala} 
+\caption{Using \code{site}, \code{here} and  \code{up} for context-dependent parameterization.}
+\label{fig:site}
+\end{figure}
+
+As discussed in the previous section, the fundamental additional feature of a CDE over a regular environment is a special object,
+called \emph{site}, that dynamically points to the originating CDE of the parameter query.
+\emph{site} is available to be queried when defining the value bound to a particular identifier.
+In other words, environment values bound within the environment are no longer mere constant literals, instead
+they have been promoted to functions which take as an argument a dictionary representing the view of the world as seen from the query's point of origin.
+When the environment is asked to evaluate a particular parameter identifier, the function stored for that key in the dictionary is evaluated against the dictionary itself.
+We call parameters that use the \emph{site} functionality {\em context-dependent} because the valuations taken by their bindings depend on where the query is made.
+We call \emph{site} itself a \emph{view} of the environment.
+
+In addition to the view from \code{site}, we also provide users attempting to alter their environments with the views called \code{here} and \code{up}.
+\code{site} gives the user access to parameter valuations based on the value the have been modified to take at the call site.
+\code{here} gives the user access to parameter valuations that are being defined within the very same alteration statement.
+\code{up} gives the user access to parameter valuations that were available in the previous, un-altered version of the environment.
+Figure~\ref{fig:site} shows examples of how \code{site}, \code{here}, and \code{up} can be used to evaluate parameters based on their particular view of the environment.
+
+\subsection{Constraints}
+
+\begin{figure}
+\centering
+\begin{scala}
+class MyConfig extends ChiselConfig { 
+  val topDefinitions:World.TopDefs = { 
+    (pname,site,here) => pname match { 
+      case NTiles => Knob('NTILES') 
+    } 
+  } 
+  override val knobValues:Any=>Any = { 
+    case 'NTILES' => 1 // generator parameter assignment 
+  } 
+} 
+class Tile extends Module { 
+  params.constrain( ex => ex(NTiles) >  0 ) 
+  params.constrain( ex => ex(NTiles) <= 4 ) 
+} 
+\end{scala} 
+\caption{Constraining parameter values. TODO }
+\label{fig:constraints}
+\end{figure}
+
+TODO:
+Expressions library that operates on fields.
+Use simple expressions to describe relationship between parameters.
+Figure~\ref{fig:site}
+
+\subsection{External Interfaces}
+
+TODO:
+
+Knobs: dumping and recording.
+
+Constraints out: collect, dump, feed to solver.
+Additional constraints in: for DSE.
+
+Configurations represented via Scala source code. Define topDefs, knobs, top-level constraints.
+
+\section{Parameterization Best Practices In Chisel}
+
+The goal of this section is to distill some learned wisdom about effective software engineering strategies
+for deploying CDEs in a Chisel-based hardware generator.
+Beyond which parameterization paradigm to use,
+there are additionally a wide variety of design decisions that aid the process of injecting parameters into a design.
+In particular, Scala provides several built-in features that we exploit, which are not innately coupled to our choice to use
+CDEs for paramterization, but do compliment it.
+The following subsections attempt to capture some of the tradeoffs we have explored while taping out chips using our SoC generator.
+
+\subsection{Scala's Implicit Parameter Lists}
+
+\begin{figure}
+\centering
+\begin{scala}
+class A(implicit p: Parameters ) extends Module {
+  val w = p[Int]("width")
+}
+
+class B(implicit p: Parameters) extends Module {
+  val a16 = Module(new A) // A's constructor's implicit parameter resolves to p
+  val a32 = Module(new A(p.alter({"width" => 32})))
+}
+
+val b = Module(new B(Parameters.empty.alter({"width" => 16})))
+\end{scala} 
+\caption{Using Scala's implicit parameters to pass Parameter instances to Modules when no fields are overridden.}
+\label{fig:implicit}
+\end{figure}
+
+Implicit parameters are a limited form of dynamic scoping that are another built-in feature of the Scala language.
+When a method or constructor declares one of its parameters as \code{implicit}, 
+users of that method can decide whether or not to supply a value for that parameter.
+In cases where no explicit value is supplied, the compiler automatically searches the context
+of the method call for a matching ``implicit'' value.
+Resolution rules for implicit parameters guarantee that only a single matching value will be allowed to be bound by the compiler.
+While I will not discuss the resolution rules here, the salient feature is that it is based on only
+a single value of a matching type being marked with the \code{implicit} keyword in lexical scope.
+
+Implicit parameters are used to simplify Scala APIs by eliding parameters with which standard users do not need to concern themselves.
+In our case, we have found them to be particularly useful for passing our \code{Parameters} objects through a hierarchy of Modules and Bundles.
+In cases where none of the Parameter fields are being altered (which is the common case), users do not have to explicitly pass the paramet
+Figure~\ref{fig:implicit} shows examples of how implicit parameters are expressed in Scala and how we use them to make \code{Parameters}
+available throughout a hardware Module hierarchy.
+  
+\subsection{Scala Traits and Mix-ins}
+
+\begin{figure}
+\centering
+\begin{scala}
+trait HasTileLinkParameters {
+  val p: Parameters // Abstract member
+  val co = p[CoherencePolicy]("TLCoherencePolicy") // Parameters bound to local vals
+  val nM = p[Int]("TLNManagers")
+  val nC = p[Int]("TLNClients")
+  val dataBits = p[Int]("TLDataBits")
+  val dataBeats = p[Int]("TLDataBeats")
+  val dataBitsPerBeat = dataBits / dataBeats // Derived parameter
+}
+
+trait HasCacheParameters {
+  val p: Parameters // Abstract member
+  val nSets = p[Int]("NSets")
+  val nWays = p[Int]("NWays")
+}
+
+class MyBundle(implicit val p: Parameters) extends Bundle // Concrete type
+    with HasTileLinkParameters {                          // supplies p for trait
+  val data = UInt(INPUT, width = dataBits) // Use a val from the trait
+}
+
+class MyCache(implicit val p: Paramaeters) extends Module
+    with HasCacheParameters
+    with HasTileLinkParameters { // Multiple inheritance
+  val io = new MyBundle // Implicit parameter passed here
+  val managers = for (i <- 0 until nM) yield { ... }
+  val sets = for (i <- 0 until nSets) yield { ... }
+}
+\end{scala} 
+\caption{Using traits to factor out and mix in parameter bindings.}
+\label{fig:mixin}
+\end{figure}
+
+Scala supports multiple inheritance, wherein member defintions of multiple classes can be reused in the definition of a new class.
+This multiplicity is accomplished without inheritance ambiguity by way of {\em mixins},
+which are classes that contains methods for use by other classes without having to be the parent class of those other classes.
+Specfically, Scala allows users to define mixin {\em traits}
+that represent a distinct feature or aspect orthogonal to the responsibility of a concrete type.
+A trait cannot itself be instantiated, instead the trait's functionality is mixed-in when defining or using a class.
+Since traits are innately abstract, they can contain abstract methods and members that are to be filled in by the concrete class.
+
+We have found it productive to use traits to encapsulate the process of extracting parameter values from CDEs and binding them to local variable names.
+Parameter lookups need only occur once per class instantiation, instead of every time a particular parameter is used.
+Code reuse is improved across many classes that make use of the same parameters, such as all the Bundles in
+a multi-channel protocol specification.
+Figure~\ref{fig:mixin} shows examples of how we mix-in traits containing parameter bindings to Module and Bundle sub-classes.
+
+\subsection{Structs vs Fields}
 
 \begin{figure}
 \centering
 \begin{scala}
   
-val params = Parameters.empty
+class TLCoherencePolicy extends Field[CoherencePolicy]
+class TLNManagers extends Field[Int]
+class TLNClients extends Field[Int]
+class TLDataBits extends Field[Int]
+class TLDataBeats extends Field[Int]
 
-val tileParameters = parameters.alter(
-  (key, site) => { 
-    case 'width' => 64 
-  }) 
+trait HasTileLinkParametersFromFields {
+  val p: Parameters
+  val co = p(TLCoherencePolicy)
+  val nM = p(TLNManagers)
+  val nC = p(TLNClients)
+  val dataBits = p(TLDataBits)
+  val dataBeats = p(TLDataBeats)
+  val writeMaskBits: Int = ((dataBits / dataBeats) - 1) / 8 + 1
+  val dataBitsPerBeat: Int = dataBits / dataBeats // Derived parameter
+}
 
+case class TileLinkParameters(
+    coherencePolicy: CoherencePolicy,
+    nManagers: Int,
+    nClients: Int,
+    dataBits: Int,
+    dataBeats: Int = 4,
+    overrideDataBitsPerBeat: Option[Int] = None
+    ) {
+  val writeMaskBits: Int  = ((dataBits / dataBeats) - 1) / 8 + 1
+  val dataBitsPerBeat: Int = overrideDataBitsPerBeat.getOrElse(dataBits / dataBeats)
+}
+
+class TLKey extends Field[TileLinkParameters]
+
+trait HasTileLinkParametersFromStructs {
+  val p: Parameters
+  val tl = p(TLKey)
+  val co = tl.coherencePolicy
+  val nM = tl.nManagers
+  val nC = tl.nClients
+  val dataBits = tl.dataBits
+  val dataBeats = tl.DataBeats
+  val writeMaskBits = tl.writeMaskBits
+  val dataBitsPerBeat = tl.dataBitsPerBeat
+}
+  
 \end{scala} 
-\caption{Using partial functions for parameterization.}
-\label{fig:paramspf}
+\caption{Two alternative approaches to representing sub-fields of inter-related parameters.}
+\label{fig:fields}
 \end{figure}
 
-As discussed in the previous section, the sole additional feature of a CDE over a regular environment is a special object,
-called \emph{site}, that dynamically points to the originating CDE of the parameter query.
-\emph{site} is available to be queried when defining the value bound to a particular identifier.
-In other words, environment values bound within the environment are no longer mere literals, instead
-they have been promoted to functions which take as an argument a dictionary representing the view of the world as seen from the query's point of origin.
-When the environment is asked to evaluate a particular parameter identifier, the function stored for that key in the dictionary is evaluated against the dictionary itself.
-We call parameters that use the \emph{site} functionality {\em context-dependent} because the valuations taken by their bindings depend on where the query is made.
+Another parameterization design decision that is orthogonal to the choice of paradigm is
+the granularity with which individual parameters are exposed to the rest of the design.
+Figure~\ref{fig:fields} shows two alternative approaches generator authors can take to exposing
+the parameters used by their generator to external clients.
+Each have pros and cons, and designers using our tools have employed each in different instances.
 
-We can
+In the first approach, every independent parameter is represented by an individual Field definition.
+Dependent parameters are then defined in traits after the parameters have been bound to local variables.
+This approach plays nicely with our \code{Constraints} framework, as that relies on individual
+However, it requires users to mixin the traits to gain access to
+It also imposes an additional burden when we work with context-dependent parameters, as we will discuss
+in the next subsection.
 
-derivation, and
-geography
-here
+In the second approach, every independent parameter is made a member of a case class.
+Scala case classes export their constructor parameters,
+provide a succinct syntax for copy constructors,
+and provide a recursive decomposition mechanism via pattern matching.
+Dependent parameters are defined within the class itself.
+This approach is not as compatible with our \code{Constraints} framework, which at this time
+does not support constraints defined on individual class members.
+However, it provides all dependent parameters inherently, requiring no mixins.
+It also provides a convenient syntax for working with context-dependent parameters.
 
-\subsection{Constraints}
+\subsection{Geography and Heterogeneity}
 
-Operators on fields.
+\begin{figure}
+\centering
+\begin{scala}
+case object CacheName extends Field[String] // New geographical fields
+case object TLId extends Field[String]
 
-\subsection{External Interfaces}
+class DefaultConfig extends Config(
+  topDefinitions = { (pname,site,here) =>
+    pname match {
+      case "NSets" => 128 // A context-independent (constant) lookup
+      case "NWays" => if(site(CacheName) == "L1I") 2 else 4 // A context-dependent lookup
+      case TLKey => if(site(TLId) == "L2ToMC") {            // and another
+          TileLinkParameters(
+            coherencePolicy = new MEICoherence(new NullRepresentation(site(NBanksPerMemoryChannel))),
+            nManagers = 1,
+            nClients = site(NBanksPerMemoryChannel),
+            dataBits = site(CacheBlockBytes)*8)
+        } else {
+          TileLinkParameters(
+            coherencePolicy = new MEICoherence(new NullRepresentation(site(NBanksPerMemoryChannel))),
+            nManagers = 1,
+            nClients = site(NBanksPerMemoryChannel),
+            dataBits = site(MemoryInterfaceBytes)*8)
+        }
+      //...
+    }
+  }
+)
 
-Knobs: dumping and recording.
+val l2toMCNetwork = Module(new TLNetwork()(params.alter({TLId => "L2toMC"}))) // Inject geography into context
+val outerNetwork = Module(new TLNetwork()(params.alter({TLId => "Outermost"}))) // A different location
+val icache = Module(new ICache()(params.alter({CacheName => "L1I"; TLId => "L2toMC"}))) // Can be multiply located
 
-Constraints out: feed to solver.
-Additional constraints in: for DSE.
+\end{scala} 
+\caption{Using CDEs to express geographical heterogeneity.}
+\label{fig:geo}
+\end{figure}
 
-Configurations as scala objects
+Figure~\ref{fig:geo} shows examples of how geographical information can be embedded in a CDE
+and exploited by making use of the \code{site} functionality.
+For each parameter that varies heterogenously across the design, we use \code{site}
+to reference another parameter that abstractly describes the ``location'' of that parameter within the design.
+Parameters which vary together are keyed off of the same geographic parameter.
+It is important to note that the original generator library does not need to know anything about
+this geographical parameter:
+it can be introducted by external users and injected into the design at the top-level or anywhere in between.
+\code{site} is what allows us to decoupled the definition of the parameters bindings from the run-time evaluation of their values,
+which vary based on ``where'' they are queried.
 
-\section{Parameterization Best Practices In Chisel}
+\subsection{The FindBy Pattern}
 
-The goal of this section is to distill some learned wisdom about effective software engineering strategies
-for deploying CDEs in a Chisel-based generator.
-Beyond which paradigm to use, there are additionally a wide variety of design decisions that go into injecting parameters into a design,
-and I would like to capture some of the tradeoffs we have explored while taping out chips using our SoC generator.
+\begin{figure}
+\centering
+\begin{scala}
+case object CacheName extends Field[String]
+case object TLId extends Field[String]
+case class TLKey(id: String) extends Field[TileLinkParameters]
 
-\subsection{Scala's Implicit Parameter Lists}
+class DefaultConfig extends Config(
+  topDefinitions = { (pname,site,here) =>
+    type PF = PartialFunction[Any,Any]
+    def findBy(sname:Any):Any = here[PF](site[Any](sname))(pname)
+    pname match {
+      case "NSets" => findBy(CacheName) // Pivot to lookup by cache name
+      case "NWays" => findBy(CacheName) // Likewise
+      case "L1I" => { // Icache location
+        case "NSets" => 128
+        case "NWays" => 2
+      }:PF
+      case "L1D" => { // Dcache location
+        case "NSets" => 128
+        case "NWays" => 4
+      }:PF
+      case TLKey("L2toMC") => // First
+        TileLinkParameters(
+          coherencePolicy = new MEICoherence(new NullRepresentation(site(NBanksPerMemoryChannel))),
+          nManagers = 1,
+          nClients = site(NBanksPerMemoryChannel),
+          dataBits = site(CacheBlockBytes)*8)
+      case TLKey("Outermost") => site(TLKey("L2toMC")).copy(dataBeats = site(MemoryDataBeats))
+      //...
+    }
+  }
+)
+\end{scala} 
+\caption{Using a transformation to collate related parameters in a Config based on geography.}
+\label{fig:findby}
+\end{figure}
 
-\subsection{Structs vs Fields}
+While allowing each parameter to vary independently based on geographical parameters is a powerful capability,
+in practice many sets of parameters vary together because they are controlling the same generator.
+We have found that users are often discontent with varying each of these correlated parameters independenty.
+When many locations are possible for each parameter, the replicated code to select amongst them can
+take up a significant fraction of the Config description. 
+Figure~\ref{fig:findby} shows examples of other strategies for managing correlated parameters.
 
-\subsection{The Cake Pattern}
+The first method we introduce we term the \code{findBy} pattern. We add a utility function that
+makes use of both \code{site} and \code{here} in order to pivot the parameter lookup such that we first lookup
+the geographic key and then within that namespace lookup the original parameter query.
+This pivot has the effect of allowing us to organize parameter bindings that change in the same way
+so as to be sorted by geographical location.
 
-\subsection{Locations and Geography}
+The second method performs a similar transformation, but builds on the earlier design decision
+to use case classes to store related parameters rather than individual fields.
+This pattern is concise and allows us to make use of the copy constructor syntax built into case classes, because we
+can reference other georgraphic keys directly.
+In cases where we do not need to define constraints on individual parameters, we find we prefer this syntax.
+However, this is more of a stylistic choice than a functional one, as the two approaches
+are functionally equivalent.
 
-\subsection{Composing Configurations}
-
-\subsection{Dealing with Heterogeneity}
-
-\subsection{Deeply Nested Bundles}
-
-Store Data Queue example.
+We will return to some of these examples in later chapters after we define further properties of TileLink networks and CoherencePolicies.
 
 \section{Discussion and Future Work}
 \label{sec:con}
 
-Relationship to HLS: Unlike high-level synthesis tools that transform abstract descriptions of a computation into gates, hardware generators are parameterized, programmatic descriptions of how to elaborate a templated RTL module hierarchy.
+Unlike high-level synthesis tools that transform abstract descriptions of a computation into gates,
+hardware generators are parameterized, programmatic descriptions of how to elaborate a templated RTL module hierarchy.
+Because parameters are so essential to generators, we have devoted significant effort to
+developing a parameterization paradigm that supports composing them.
+As we look forward, we envision Chisel serving as the basis on which more abstract and high-level tools will be layered.
+We contend that parameterization will be just as important for such tools.
+Even though some of the details of the implementation may become hidden,
+we will need to provide direction for how the high-level computations should be mapped
+onto hardware structures.
+Furthermore, the space of possible implementations for a HLS description can be quite large,
+so expressing those tradeoffs in a way that is compatible with design space exploration is important.
 
-Runtime error handling: unbound parameters, dynamic typing, infinite recursion using site
+While I will not discuss it further as part of this thesis, we have prototyped some initial implementations
+of hooking up our \code{Parameters} and \code{Constrait} abstractions to a design space exploration tool, called Jackhammer \cite{}.
+Given a set of free top-level parameters and a set of constraints placed upon them, Jackhammer can create a design of experiments and
+execute that design against a cloud-based service for design point evaluation.
+Further work is required to automate the exploration process, and close the loop between feedback from one iteration of examing a
+set of design instances and selecting points for further exploration.
 
-Jackhammer and design space exploration
+The biggest downside to relying on a dynamically-scoped solution for parameterization is that there
+are a class of errors that would be compile-time errors in a lexically-scoped system that are
+run-time errors in a dynamically-scoped one.
+These errors include things such as:
+parameters never being bound to a value, function or \code{Knob};
+parameters being bound to return a type that does not match that expected by their query site;
+or infinite recursion of the the CDE implementation due to loops in the \code{site} call graph.
+While we have attempted to provide sensible error messages for some of these cases
+it is difficult to wholly absolve ourselves of introducing the possibility of run-time failures.
+In the future it might be possible to use Scala's support for macros to do a better job of eliding the need for runtime type casts
+in cases where the top-level configuration is itself specified as Scala source code.
+Overall, we feel that the power of dynamic scoping for modification of parameters in deeply nested hierarchies,
+such as those seen in our RocketChip generator, is worth the cost.
 
 \section{Conclusion}
 \label{sec:con}
 
-We have presented a taxonomy of existing parameterization paradigms in HDLs and demonstrated that our context-dependent environments paradigm is provably more robust in the face of modification to any given design's module hierarchy. 
-
+We have presented a taxonomy of existing parameterization paradigms in HDLs and demonstrated that our 
+context-dependent environments paradigm is provably more robust in the face of modification to any given design's module hierarchy. 
+We have also provided case studies of how CDEs are particularly appropriate for hardware generators,
+and offered insights into how best to deploy them within a new HDL embedded in Scala.
+In the following chapters, we will move on to the specfics of how to express cache coherence protocols with hardware generators,
+and build on the CDE framework to effectively parameterize both the protocols themselves and the hardware modules that implement them.
