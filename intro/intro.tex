@@ -63,7 +63,8 @@ In July 2015, Intel announced that their next generation of processors will not 
 and that a third iteration on the design of the current processor generation would be used to fill in the gap.
 This scheduling change pushed the cadence of their technology node jumps out to nearly three years,
 and also broke the ``tick/tock'' model of design-change-or-technology-shrink per generation that the company had been holding fast to since 2007.
-The proximal effect of the slowdown is for Intel and other companies to increase the number of design iterations they cycle through at each technology node.
+In March 2016, Intel announced in their 10-K that they ``expect to lengthen the amount of time we will utilize our 14 nanometer and our next-generation 10 nanometer process technologies, further optimizing our products and process technologies while meeting the yearly market cadence for product introductions" and introduced a three step Process-Architecture-Optimization model.
+The proximal effect of this slowdown is for Intel and other companies to increase the number of design iterations they cycle through at each technology node.
 In order to add value to the next product, companies will have to improve the design while working with the same transistor resources.
 
 Taken together, the rise of power constraints and increasing cost per transistor at new technology nodes
@@ -350,6 +351,46 @@ In other cases, the correct abstraction takes the form of a compiler pass, highe
 Additionally, we have developed some pure Scala software utilities that aid in the hardware design process.
 We have composed these various libraries of tools and generators into a complete SoC chip generator~\cite{rocket}.
 In the next section I discuss the specific contributions my thesis makes to the Chisel ecosystem to aid in the design of cache coherent memory hierarchies.
+
+\subsection{Rocket Chip Generator}
+
+Chisel's first-class support for object-orientation and
+metaprogramming allows hardware designers to write generators,
+rather than individual instances of designs, which in turn encourages
+the development of families of customizable designs.  By encoding
+microarchitectural and domain knowledge
+these generators, we can quickly create different
+chip instances customized for particular design goals and constraints
+\cite{shacham-micro10}.  As constructing hardware generators requires
+support for reconfiguring individual components based on the context
+in which they are deployed, a particular focus of Chisel is to improve
+upon the limited module parameterization facilities of traditional
+hardware description languages.
+
+The Rocket chip generator is written in Chisel and constructs a
+RISC-V-based platform.  The generator consists of a collection of
+parameterized chip-building libraries that we can use to generate
+different SoC variants.  By standardizing the interfaces that are used
+to connect different libraries' generators to one another, we have
+created a plug-and-play environment in which it is trivial to swap out
+substantial components of the design simply by changing configuration
+files, leaving the hardware source code untouched.  We can also both
+test the output of individual generators as well as perform
+integration tests on the whole design, where the tests are also
+parameterized so as to exercise the entire design-under-test.
+
+Figure~\ref{fig:generators} presents the collection of library generators and their interfaces within the Rocket chip generator.
+These generators can be parameterized and composed into a wide variety of SoC designs.
+
+\begin{figure}[t!]
+\centering
+\vspace{-0.3in}
+\includegraphics[width=.6\columnwidth,trim=0 0 0 0.1in,clip]{figures/rocket-chip.pdf}
+\vspace{-0.15in}
+\caption{The Rocket chip generator consists of the following sub-components: A) Core generator B) Cache generator C) RoCC-compatible coprocessor generator D) Tile generator E) TileLink generator F) Peripherals }
+\label{fig:generators}
+\vspace{-0.1in}
+\end{figure}
 
 \section{Contributions}
 
