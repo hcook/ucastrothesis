@@ -40,10 +40,16 @@ In a system with hardware-managed cache coherence, the cache controllers and mem
 communicate among themselves according to some protocol to maintain coherence.
 While they might have vastly different implementations, 
 all such protocols maintain coherence by ensuring the same {\em single-writer, multiple-reader} (SWMR) invariant \cite{sorin2011primer}. 
-For a given block of cached memory, at any given moment in time, there is either: 
+For a given block of cached memory, at any given moment in logical time, there is either: 
 (1) a single core that may write and read the block, or 
 (2) there are zero or more cores that may only read the block.
-Violating this invariant could lead to values stored out by one core never becoming visible to other cores.
+However, because this definition is based on a notion of logical time rather than physical time,
+it does not preclude a variety of important optimizations that would otherwise appear to violate this constraint.
+Our definition of coherence must also augment the SWMR invariant with a data value invariant
+that pertains to how values are propagated from one logical epoch to the next.
+This invariant states that the value of a memory location at the start of an epoch
+is the same as the value of the memory location at the end of its last read–write epoch \cite{sorin2011primer}.
+Violating either of these invariants could lead to values stored out by one core never becoming visible to other cores.
 
 For the rest of this chapter, I distinguish coherence policies from coherence protocols.
 A coherence {\em policy} governs how the SWMR invariant is represented as metadata indentifying available permissions on data blocks.
@@ -77,8 +83,8 @@ TileLink is based around a four-hop structure.
 \includegraphics[width=1\columnwidth]{tilelink/figures/hops.pdf}
 \caption{Outlines of various coherence transaction shapes.
 A. Exploiting a globally synchronous broadcast medium, client agents can directly reply to one another in two hops.
-B. With point-to-point communication, a manager agent provides a possible point of synchronization.
-C. With unordered message delivery, requiring a fourth hop adds latency but improves robustness.
+B. With point-to-point communication, a manager agent provides a possible point of serialization.
+C. With unordered message delivery, a fourth hop can symplify the complexity of maintining a global serialization.
 }
 \label{fig:hops}
 \end{figure}
@@ -192,7 +198,9 @@ and valid is driven high by the sender when it has a message to offer.
 
 Channels that contain data may send the data over multiple {\em beats}, where each beat contains a subset of the block's data.
 The relationship between the size of the data beat and the size of the data block is configurable.
-Typically the data block size is set based on the desired ratio of metadata to data storage overhead,
+Typically the lower bound of data block size is set based on
+the desired ratio of metadata to data storage overhead,
+while the upper bound is set by the diminishing returns on exploiting spatial locality in most programs,
 as well as other cache coherence performance concerns that will be discussed in the next chapter.
 The data beat size, in contrast, is set based on the width of the underlying physical network.
 The width of the underlying network is exposed to TileLink agents in order to
@@ -527,10 +535,18 @@ Multiple Grants and Finishes can also be in flight simultaneously, and the trans
 
 In order to support high-bandwidth access to cached data blocks from data-parallel accelerators, TileLink enables many outstanding built-in, sub-block transactions
 to be in flight in the memory hierarchy at once.
-As long as the Acquire used to initiate the transaction target different sub-block addresses, it is safe to interleave their processing by merging the transactions with one another.
-Figure~\ref{fig:acq-merge} illustrates this scenario.
+In general, it is preferable to merge such transactions on the client side, before they are even exposed to the TileLink interface.
+However, in order to provide support for secondary misses in hierarchical agents we define the following rules for transaction merging.
+
+As long as the Acquires used to initiate the transaction target different sub-block addresses, it is safe to interleave their processing by merging the transactions with one another.
+The Acquires must be attempting to gain the same permissions and perform the same operation.
+The Acquires must have unique transaction identifiers.
+Acquires from multiple client agents can be merged so long as they meet the above requirements.
+
+Figure~\ref{fig:acq-merge} illustrates a merging scenario from a single client.
 Multiple Grants and Finishes can also be in flight simultaneously, and the overall merged transaction terminates when the correct count of Finishes is accepted.
 In order to prevent starvation of other clients, merging secondary sub-block transactions should not be prioritized over processing transactions initiated by other clients.
+Merging transactions is an allowable performance optimization, not a requirement.
 
 \section{Assumptions and Guarantees}
 
@@ -544,9 +560,11 @@ The following list collects the requirements necessary for a correct TileLink im
 \begin{itemize}
 \item If a message contains multiple beats of data, all beats will eventually be sent.
 \item A client issuing an Acquire will eventually receive a corresponding Grant.
-\item A client recieving a Grant will issue a corresponding Finish.
+\item A client recieving a Grant will issue a corresponding Finish,
+unless the physical network is known to provide in-order delivery.
 \item A client recieving a Probe will issue a corresponding Release.
-\item A client issuing a voluntary Release will receive a corresponding Grant (of type VoluntaryAck).
+\item A client issuing a voluntary Release will receive a corresponding Grant (of type VoluntaryAck), 
+unless the physical network is known to provide in-order delivery.
 \item Managers always consume any available Finish messages.
 \item No duplicate messages will be created by any agents or within any channels.
 \item All messages will eventually be delivered by te physical channels; a message cannot be lost.
@@ -558,11 +576,10 @@ The following list collects the requirements necessary for a correct TileLink im
 \item If a client has an outstanding voluntary Release on a block, it will not issue an Acquire on that block until it recieves the Release's corresponding Grant.VoluntaryAck.
 \item If a manager has already has accepted an Acquire on a block, it will not issue Probes or Grants in response to a second Acquire on that block until it recieces a Finish from the first Acquire's source.
 \item A manager will always include a copy of the data in a Grant, unless it can prove that the client had a copy of the block when the Acquire was accepted and no Probes from outer memory for that block have been recieved.
-\item Clients may issue Acquires with the same {\tt client\_xact\_id} and {\tt addr\_block}, as long as they have different {addr\_beat}, {a\_type}, or {union} fields.
+\item Clients may not issue multiple Acquires with the same {\tt client\_xact\_id} and {\tt addr\_block} fields, unless they have different {addr\_beat}, {a\_type}, or {union} fields.
 \item In a multi-level system, the transaction whose Acquire is first to reach the outermost Manager required to gain sufficient permissions happens before the other transaction,
 and the final state of the data and permissions in the system must reflect this ordering.
 \item A Hierarchical agent will block Probes from being forwarded from its outer client interface to its inner manager interface until it has recieved Finishes for all Grants on that block.
-\item When running on networks that provide guaranteed ordering of messages between any client/manager pair, the Finish acknowledgment of a Grant (and the Grant acknowledgement of a voluntary Release) may be omitted.
 \end{itemize}
 
 \section{Channel Signal Descriptions}
@@ -771,7 +788,7 @@ TLMaxClientXacts & Int & Max number of concurrent transactions per client \\ \hl
 TLMaxClientsPerPort & Int & Max number of clients sharing a single network port \\ \hline
 TLMaxManagerXacts & Int & Max number of concurrent transactions per manager \\ \hline
 TLBlockAddrBits & Int & Address size \\ \hline
-TLDataBits & Int & Amount of block data sent per beat, must be > 64b \\ \hline
+TLDataBits & Int & Amount of block data sent per beat, must be >= XLEN \\ \hline
 TLDataBeats & Int & Number of beats per cache block \\ \hline
 TLNetworkIsOrderedP2P & Boolean & Whether the underlying physical network \\
                       &         & preserved point-to-point ordering of messages \\ \hline
@@ -780,63 +797,6 @@ TLNetworkIsOrderedP2P & Boolean & Whether the underlying physical network \\
 \caption{Exposed top-level TileLink independent parameters. These are set for each level of the memory hierarchy.}
 \label{tab:tlparams}
 \end{table}
-
-\section{Memory Opcodes} 
-
-TODO: Should this be an appendix?
-
-\begin{table}
-\centering
-\begin{tabular}{|l|l|l|}
-\hline
-Name  & Code & Operation \\ \hline \hline
-M\_XRD      & b00000 & integer load \\ \hline 
-M\_XWR      & b00001 & integer store \\ \hline 
-M\_PFR      & b00010 & prefetch with intent to read \\ \hline 
-M\_PFW      & b00011 & prefetch with intent to write \\ \hline 
-M\_XA\_SWAP & b00100 & atomic swap \\ \hline 
-M\_NOP      & b00101 & no op \\ \hline 
-M\_XLR      & b00110 & load release \\ \hline 
-M\_XSC      & b00111 & store conditional \\ \hline 
-M\_XA\_ADD  & b01000 & atomic add \\ \hline 
-M\_XA\_XOR  & b01001 & atomic xor \\ \hline 
-M\_XA\_OR   & b01010 & atomic or \\ \hline 
-M\_XA\_AND  & b01011 & atomic and \\ \hline 
-M\_XA\_MIN  & b01100 & atomic min \\ \hline 
-M\_XA\_MAX  & b01101 & atomic max \\ \hline 
-M\_XA\_MINU & b01110 & atomic min unsigned \\ \hline 
-M\_XA\_MAXU & b01111 & atomic max unsigned \\ \hline 
-M\_FLUSH    & b10000 & write back dirty data, cede R+W permissions \\ \hline 
-M\_PRODUCE  & b10001 & write back dirty data, cede W permissions \\ \hline 
-M\_CLEAN    & b10011 & write back dirty data, retain R+W permissions \\ \hline
-\end{tabular}
-\caption{Operations expressible via the \code{op\_code} field of Acquire transactions.}
-\label{tab:opcodes}
-\end{table}
-
-\begin{table}
-\centering
-\begin{tabular}{|l|l|l|}
-\hline
-Name  & Code & Meaning \\ \hline \hline
-MT\_B & b000 & byte \\ \hline
-MT\_H & b001 & half \\ \hline
-MT\_B & b010 & word \\ \hline
-MT\_D & b011 & double \\ \hline
-MT\_BU & b100 & byte unsigned \\ \hline
-MT\_HU & b101 & half unsigned \\ \hline
-MT\_WU & b110 & word unsigned \\ \hline
-\end{tabular}
-\caption{Operation sizes expressible via the \code{op\_size} field of Acquire transactions.}
-\label{tab:opsizes}
-\end{table}
-
-Table~\ref{tab:opcodes} lays out the codes for operations
-that can be inserted into the \code{op\_code} field of Acquire transactions.
-They are derived from the interface between the Rocket pipeline and its data cache.
-They correspond to some degree with the RISC-V RV64A memory operations.
-Similarly, Table~\ref{tab:opsizes} lays out the codes for expressing the size of operation
-that should occur in memory (for atomic operations).
 
 \section{Discussion and Future Work}
 
@@ -863,6 +823,7 @@ While all extant implementations provide coherence over on-chip networks in on-c
 there is no fundamental reason why TileLink could not be applied to multi-chip shared memory designs.
 However, in addition to requiring new modules to implement classical in-memory directories,
 certain classes of optimizations may prove to be critical to performance for which TileLink, as specified here, cannot provide.
+In addition to the aforementioned client-to-client transfers, large-scale coherence protocols often include elements of speculation and rollback that we have yet to attempt to express within the TileLink transaction structure.
 Other design decisions may prove unnecessarily detrimental in the bandwith/latency space of chip-to-chip communications.
 It is unclear whether addressing these concerns is best done within the context of TileLink, or whether we would
 do better to keep the specification specialized for the on-chip domain and fall back on other
@@ -874,7 +835,7 @@ Interoperability with AXI has already been shown with roof-of-concept prototypes
 Plans are already underway to provide converters to RapidIO bus architectures as well.
 One remaining challenge is to see where support for conversions between TileLink's user-defined, custom coherence states and message types and other coherence protocols,
 such as ARM's AXI-based ACE or IBM's CAPI.
-I think TileLink's use of the memory op codes discussed in the next chapte may provide the key to inter-protocol conversions of this sort.
+I think TileLink's use of the memory opcodes discussed in Appendix~\ref{a.memopcodes} may provide the key to inter-protocol conversions of this sort.
 
 Finally, we are working to develop a complete formal specification of the TileLink interface.
 Our current approach uses logical clocks to define the manager/client interface in terms of composable transducers.

@@ -1,0 +1,136 @@
+\appendix{TileLink Memory Opcodes}
+\label{a.memopcodes}
+
+\section{Memory Opcodes} 
+
+  
+\begin{figure}[h]
+\begin{center}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{p{1.2in}@{}p{0.8in}@{}p{0.6in}@{}p{0.4in}@{}p{0.2in}@{}p{0.2in}@{}p{0.4in}l}
+\\
+\instbitrange{168}{41} &
+\instbitrange{40}{8} &
+\instbitrange{7}{6} &
+\instbitrange{5}{4} &
+\instbit{3} &
+\instbit{2} &
+\instbitrange{1}{0} \\
+\cline{1-7}
+\multicolumn{1}{|c|}{---} &
+\multicolumn{1}{c|}{addr} &
+\multicolumn{3}{c|}{---} &
+\multicolumn{1}{c|}{w} &
+\multicolumn{1}{c|}{00} &
+Prefetches \\
+\cline{1-7}
+\\
+\cline{1-7}
+\multicolumn{1}{|c|}{data} &
+\multicolumn{1}{c|}{addr} &
+\multicolumn{2}{c|}{size} &
+\multicolumn{1}{c|}{a} &
+\multicolumn{1}{c|}{w} &
+\multicolumn{1}{c|}{01} &
+Uncached Get and Puts \\
+\cline{1-7}
+\\
+\cline{1-7}
+\multicolumn{1}{|c|}{data} &
+\multicolumn{1}{c|}{addr} &
+\multicolumn{1}{c|}{size} &
+\multicolumn{3}{c|}{aluop} &
+\multicolumn{1}{c|}{10} &
+Uncached Atomics \\
+\cline{1-7}
+\\
+\cline{1-7}
+\multicolumn{1}{|c|}{---} &
+\multicolumn{1}{c|}{addr} &
+\multicolumn{2}{c|}{size} &
+\multicolumn{1}{c|}{u} &
+\multicolumn{1}{c|}{w} &
+\multicolumn{1}{c|}{11} &
+Cached \\
+\cline{1-7}
+\end{tabular}
+\end{center}
+\caption{RISC-V base instruction formats.}
+\label{fig:baseinstformats}
+\end{figure}
+
+\begin{center}
+\begin{tabular}{M@{}R@{}S@{}R@{}O}
+\\
+\instbitrange{31}{20} &
+\instbitrange{19}{15} &
+\instbitrange{14}{12} &
+\instbitrange{11}{7} &
+\instbitrange{6}{0} \\
+\hline
+\multicolumn{1}{|c|}{imm[11:0]} &
+\multicolumn{1}{c|}{rs1} &
+\multicolumn{1}{c|}{funct3} &
+\multicolumn{1}{c|}{rd} &
+\multicolumn{1}{c|}{opcode} \\
+\hline
+12 & 5 & 3 & 5 & 7 \\
+I-immediate[11:0] & src & ADDI/SLTI[U]  & dest & OP-IMM \\
+I-immediate[11:0] & src & ANDI/ORI/XORI & dest & OP-IMM \\
+\end{tabular}
+\end{center}
+
+
+\begin{table}
+\centering
+\begin{tabular}{|l|l|l|}
+\hline
+Name  & Code & Operation \\ \hline \hline
+M\_XRD      & b00000 & integer load \\ \hline 
+M\_XWR      & b00001 & integer store \\ \hline 
+M\_PFR      & b00010 & prefetch with intent to read \\ \hline 
+M\_PFW      & b00011 & prefetch with intent to write \\ \hline 
+M\_XA\_SWAP & b00100 & atomic swap \\ \hline 
+M\_NOP      & b00101 & no op \\ \hline 
+M\_XLR      & b00110 & load release \\ \hline 
+M\_XSC      & b00111 & store conditional \\ \hline 
+M\_XA\_ADD  & b01000 & atomic add \\ \hline 
+M\_XA\_XOR  & b01001 & atomic xor \\ \hline 
+M\_XA\_OR   & b01010 & atomic or \\ \hline 
+M\_XA\_AND  & b01011 & atomic and \\ \hline 
+M\_XA\_MIN  & b01100 & atomic min \\ \hline 
+M\_XA\_MAX  & b01101 & atomic max \\ \hline 
+M\_XA\_MINU & b01110 & atomic min unsigned \\ \hline 
+M\_XA\_MAXU & b01111 & atomic max unsigned \\ \hline 
+M\_FLUSH    & b10000 & write back dirty data, cede R+W permissions \\ \hline 
+M\_PRODUCE  & b10001 & write back dirty data, cede W permissions \\ \hline 
+M\_CLEAN    & b10011 & write back dirty data, retain R+W permissions \\ \hline
+\end{tabular}
+\caption{Operations expressible via the \code{op\_code} field of Acquire transactions.}
+\label{tab:opcodes}
+\end{table}
+
+\begin{table}
+\centering
+\begin{tabular}{|l|l|l|}
+\hline
+Name  & Code & Meaning \\ \hline \hline
+MT\_B & b000 & byte \\ \hline
+MT\_H & b001 & half \\ \hline
+MT\_B & b010 & word \\ \hline
+MT\_D & b011 & double \\ \hline
+MT\_BU & b100 & byte unsigned \\ \hline
+MT\_HU & b101 & half unsigned \\ \hline
+MT\_WU & b110 & word unsigned \\ \hline
+\end{tabular}
+\caption{Operation sizes expressible via the \code{op\_size} field of Acquire transactions.}
+\label{tab:opsizes}
+\end{table}
+
+Table~\ref{tab:opcodes} lays out the codes for operations
+that can be inserted into the \code{op\_code} field of Acquire transactions.
+They are derived from the interface between the Rocket pipeline and its data cache.
+They correspond to some degree with the RISC-V RV64A memory operations.
+Similarly, Table~\ref{tab:opsizes} lays out the codes for expressing the size of operation
+that should occur in memory (for atomic operations).
+
