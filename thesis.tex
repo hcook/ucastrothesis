@@ -48,8 +48,11 @@
 \usepackage{booktabs}
 \usepackage{url}
 \usepackage{mdwlist}
+\usepackage{lscape}
 \usepackage{array}
 \usepackage{multirow}
+\usepackage{rotating}
+\usepackage{pifont}
 \def\code#1{{\tt #1}}
 \include{scala}
 
@@ -139,7 +142,9 @@ This dissertation was typeset using the
 \include{intro/intro}
 \include{parameters/parameters}
 \include{tilelink/tilelink}
-\include{tilelink/memopcodes}
 \include{coherence/coherence}
 \bibliography{thesis}{}
+\include{appendix/memopcodes}
+\include{appendix/swmem}
+
 \end{document}
