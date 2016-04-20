@@ -7,9 +7,10 @@ In this new world of energy-efficient, heterogeneous, application-specific desig
 
 Since it is not possible to build custom chips from scratch for every application,
 we need hardware design tools that allow us to capture decisions made
-during the process of designing one chip and easily make them differently when tackling a new target.
-Creating parameterized hardware generators rather than individual design instances not only allows for application-specific customization of the final hardware,
-but also gives designers the capability to preserve knowledge related to performance and energy trade-offs from previous design iterations.
+during the process of designing one chip, yet easily make them differently when tackling a new target.
+Creating parameterized hardware generators, rather than individual design instances, 
+not only allows for application-specific customization of the final hardware,
+it also gives designers the capability to preserve knowledge related to performance and energy trade-offs from previous design iterations.
 By parameterizing aspects of the design, we can scale it from test chip sizes to final product without rewriting any modules, amortizing verification costs and increasing the validation confidence over time without rewriting code.
 This templated, meta-programming approach is integral to our agile approach to hardware design.
 
@@ -20,7 +21,7 @@ We term these features the {\em parameters} of the generator.
 {\em Parameterization} is the process by which a generator supplies values for each parameter,
 i.e. binds the name of the parameter to a particular value,
 before using that evaluation to elaborate details of the particular design instance at hand.
-A {\em parameterization paradigm} codifies a particular way of expressing parameters and provides tools to support their application within and injection into generators,
+A {\em parameterization paradigm} codifies a particular way of expressing parameters and provides tools to support their application within generators,
 as well as mechanisms to constrain their valuations.
 
 The parameters and their constraints become the interface through which the generator author and the system architect communicate.
@@ -49,7 +50,7 @@ serves to support generator reusability and composition, while also improving a 
 We provide both a case study and a formal analysis of design robustness with respect to each of the parameterization paradigms in our taxonomy, and prove that CDEs are the most robust option.
 We then provide examples of how our open-source Scala implementation of CDEs is used in various sub-components of our RocketChip SoC generator.
 
-As we will see later in this thesis, even a design choice as complicated and pervasive as a multi-level cache coherence protocol can be made a tunable design parameter when proPerly factored out from the rest of the design. 
+As we will see later in this thesis, even a design choice as complicated and pervasive as a multi-level cache coherence protocol can be made a tunable design parameter when properly factored out from the rest of the design. 
 By providing support for generating a family of protocols rather than one single protocol, my thesis has enabled us to iterate on protocol design as we scale up the size of the memory hierarchy across chip iterations.
 
 \section{Background}
@@ -88,19 +89,19 @@ we can free generator authors from the constraints of the backend language with 
 This approach also allows us to supply parameter bindings from external tools at hardware generation time,
 which is a critical features for design space exploration~\cite{shacham2011chip}.
 It is important to note that there are several different times during the hardware elaboration process where
-we might decide to supply parameter values, and in particular this chapter will discuss tradeoffs between
+we might decide to supply parameter values, and in particular, this chapter will discuss tradeoffs between
 binding parameters to values at generator compile-time as opposed to generator run-time.
 
 How parameters are expressed and referenced within and among generators is another important design question.
 From the perspective of the author of a hardware generator, it is impossible to know the full context in which the components created by their generator will be instantiated.
-The goal of the author of a hardware generator is to expose as many parameters as they possibly can to the user (e.g. an SoC architect),
+The goal of the author of a hardware generator is to expose as many parameters as they possibly can to the user (e.g., an SoC architect)
 while also recording any constraints the internals of the design put on those parameters' values.
 Our parameterization paradigm must also accept constraints that are imposed by parent modules on their children, in the service of interoperability,
 or by completely external tools, in the service of design space exploration.
 Again, we are aided by the expressionality of the host language and the ability to connect with outside tools at hardware generation time.
 Finally, while the parameters themselves are often merely instances of simple numeric or boolean types
-depending on the nature of the meta-programming language we can also consider utilizing parameters that are bound to functions, user-defined objects
-or other parameters.
+depending on the nature of the meta-programming language,
+we can also consider utilizing parameters that are bound to functions, user-defined objects, or other parameters.
 As we will see, exploiting a host language's capability to use more complicated types in the parameterization framework
 is an essential requirement for using it to support customizable cache coherence protocols.
 
@@ -115,12 +116,12 @@ We include a comparison with Genesis2's Perl-based dynamic parameterization para
 
 The opportunity presented by embedding Chisel in Scala inspired us to examine parameterization solutions that have been investigated in software contexts.
 Fundamentally, parameterization is a name binding problem, in which a data or code entity must be bound to an identifying name.
-In our case, generators express the hardware they elaborate in terms of the parameters' identifiers, and the framework is in charge of supplying the matching data
-as the hardware is generated.
+In our case, generators express the hardware they elaborate in terms of the parameters' identifiers,
+while the framework is in charge of supplying the matching data as the hardware is generated.
 What data is supplied for a particular name depends on the scoping of the identifier, which might be handled \emph{lexically} or \emph{dynamically}.
 Lisp languages were the first to explore tradeoffs between dynamic scoping and lexical scoping \cite{gordon}.
 
-With lexical scoping, in order to bind a name to an entity we first search in the local function, then the scope in which this function was defined, and so on.
+With lexical scoping, in order to bind a name to an entity, we first search within the local function, then within the scope in which this function was defined, and so on.
 ``Lexical'' in this case refers to the text of the source code itself.
 Lexical scoping provides referential transparency, which is a boon for both the programmer and compiler.
 By analyzing the source code, it is possible to determine at compile time whether or not a particular binding is within scope.
@@ -129,17 +130,17 @@ Unfortunately, bindings needed by deeply nested components must be explicitly th
 With dynamic scoping, we again search first in the local function, but then search the function that called this function, and so on up the call stack of the running program.
 ``Dynamic'' in this case refers to the fact that the call stack can be different every time a given function is called, and so the binding created for the variable can thereby differ as well.
 Dynamic binding is useful as a substitute for globally-scoped variables, and is excellent for deep customization of nested subsystems.
-In cases where the necessary bindings may radically change from program instance to program instance, dynamic binding allows us to only specify those bindings that we know this instance will use.
+In cases where the necessary bindings may radically change from program instance to program instance, dynamic binding allows us to only specify those bindings that we know the current instance will use.
 Unfortunately, in some cases programmer errors that could have been caught at compile time in a lexically-scoped system become runtime errors in a dynamically-scoped system.
 
 While lexical binding is now the norm for most programming languages, many mechanisms have been developed to allow programmers to explicitly tie in dynamic binding benefits where they are useful.
 These include special binding forms in most Lisp variants
-(e.g. \code{fluid-let} in Scheme \cite{steele} and \code{parameterize} in Racket \cite{flatt2013racket}),
-implicit parameters \cite{lewis2000implicit}, and the Reader monad of Haskell \cite{jones1995functional}.
+(e.g., \code{fluid-let} in Scheme \cite{steele} and \code{parameterize} in Racket \cite{flatt2013racket}),
+implicit parameters \cite{lewis2000implicit}, and the Reader monad in Haskell \cite{jones1995functional}.
 While these approaches all focus on re-enabling the parameterization flexibility of dynamic binding in a more controlled manner, 
 the context-dependent environments we propose here are actually a strictly more powerful mechanism than traditional dynamic binding. 
 In general, taking advantage of later-binding solutions enables both more concise uniquification of elements of nested, heterogeneous systems~\cite{shacham2011chip},
-and also allows us to more robustly deal with modifications to the hierarchy of generated modules.
+and also allows us to deal with modifications to the hierarchy of generated modules more robustly.
 The following taxonomy illustrates how selectively deploying our dynamic scoping solution is the best fit for hardware generation
 by contrasting it with other lexically- and dynamically-scoped solutions.
 
@@ -147,7 +148,8 @@ by contrasting it with other lexically- and dynamically-scoped solutions.
 \label{sec:tax}
 
 Before introducing context-dependent environments, we first define and contrast three existing parameterization paradigms: argument lists, structs, and dynamic environments.
-We examine how these paradigms could be or have been used in hardware description languages and evaluate them in terms of a simple case study
+We examine how these paradigms could be or have been used in hardware description languages.
+We then  evaluate them in terms of a simple case study
 in which we describe making modifications to a hierarchical hardware generator that is composed from multiple sub-generators.
 The three paradigms we contrast in this section are:
 
@@ -180,7 +182,7 @@ somewhere in that instantiation's scope (TLC).
 In some cases, additional LCs are needed to resolve conflicting parameter names at the location where the module is instantiated.
 
 In contrast, NLCs only serve to bring a new parameter binding into scope for the new module instantiation,
-or alternatively to correct a inter-module parameter reference that has been outdated by a module insertion.
+or alternatively to correct an inter-module parameter reference that has been outdated by a module insertion.
 We view being forced to manually make NLCs within our generators' source code as representative of
 the brittleness of a particular parameterization paradigm in the face of changes to child generator interfaces
 or module hierarchy depth.
@@ -286,7 +288,7 @@ because they are multiplexing the same memory port to the rest of the system.
 This requirement is a property of this particular \code{Tile} generator; it was unknown to the designers of the \code{Cache} module.
 Furthermore, other variations on a tile generator might not enforce this particular requirement, and so we would like to expose
 \code{icSize} and \code{dcSize} to the design space explorer as independent, top-level variables.
-Thus, the proper place to enforce the constrain is within \code{Tile}, making reference to the parameters that must be bound together.
+Thus, the proper place to enforce the constraint is within \code{Tile}, making reference to the parameters that must be bound together.
 
 Figure~\ref{fig:arglist-delta} illustrates how the argument list paradigm is brittle to modifications. 
 We modify \code{Core} to use a parameterized FPU, \code{PFPU \#(fpuLatency)}, which takes as a parameter the desired latency for the unit.
@@ -359,7 +361,7 @@ For the purposes of our taxonomy, we posit that parameterization paradigms based
 In \emph{flat-struct parameterization}, each generator is paired with a used-defined struct type containing all parameters used by that generator and all of its children.
 This approach provides only a very limited advantage over the previously discussed argument list paradigm.
 In \emph{nested-struct parameterization}, instead of a generator's companion struct consisting of a flat list of parameters,
-it rather contains its own local parameters, as well as the parameter structs for its immediate children. 
+it contains its own local parameters, as well as the parameter structs for its immediate children. 
 This nesting allows further abstraction of the specific fields of the child generators' structs.
 
 Both of these schemes are still lexically scoped, but we have moved the site of the bindings into a class hierarchy of struct types,
@@ -372,7 +374,7 @@ Encapsulation through structs can reduce the burden of lexical scoping in the fa
 Taking this idea a step further, we can recognize that we do not have to maintain a one-to-one mapping between the class hierarchy of structs and the class hierarchy of modules.
 In the most extreme case, we could put all top-level parameters into a single struct which is passed to every module in the design,
 essentially recreating a flat parameter paradigm based on global constants.
-Such a solution improves modifiability by eliminating all NLCs, but is problematic for composability
+Such a solution improves modifiability by eliminating all NLCs but is problematic for composability,
 because it means that sub-modules within the design cannot be reused in other contexts without providing default bindings for all possible parameters from all contexts.
 However, more moderate solutions that exploit differences in the struct hierarchy and module hierarchy are possible at the designers' discretion.
 For simplicity, the rest of this section utilizes the simpler one-to-one mapping to illustrate the differences between the struct paradigms.
@@ -383,7 +385,7 @@ can still eliminate some non-local changes in the face of appending the PFPU mod
 This reduction happens because the module constructor argument lists do not grow with additional parameters.
 While the definitions of all the structs must be changed to account for the new parameter,
 instances where a single struct instance is passed to multiple module instantiations do not need to be changed,
-as the module instantiation no longer references the individual parameters, as they are now encapsulated fields of the struct.
+because the module instantiation no longer references the individual parameters as they are now encapsulated fields of the struct.
 However, Figure~\ref{fig:flatstruct-delta} shows that when inserting the newly parameterized \code{PFPU},
 this scheme still requires some non-local changes because every parent generators's parameter struct declaration and instantiation must be changed.
 In Section~\ref{sec:scca} we will see that the flat-struct paradigm is only a constant factor less brittle than the argument list paradigm.
@@ -443,7 +445,7 @@ Figure~\ref{fig:nestedstruct-append} applies this approach to the previous examp
 Only \code{PFPU}'s immediate parent's companion struct, \code{CorePars}, needs modification.
 The fact that \code{CorePars} now has an additional parameter associated with it is now abstracted away from both \code{Tile} and \code{TilePars}.
 
-Although the nested-structs paradigm eliminates almost all NLCs related {\em appending} new leaf modules to the hierarchy,
+Although the nested-structs paradigm eliminates almost all NLCs related to {\em appending} new leaf modules to the hierarchy,
 it retains another disadvantage related to {\em inserting} new levels into the module hierarchy.
 Figure~\ref{fig:nestedstruct-insert} provides an example of a such a scenario.
 Suppose we want to add a prefetcher to our instruction cache. 
@@ -460,7 +462,8 @@ While both struct paradigms are acceptable for flat class hierarchies with limit
 generators often have deep module hierarchies or interoperate with other generators from multiple libraries
 (correct interoperation often necessitates the imposition of constraints in parent generators).
 These lexically-scoped paradigms embrittle such designs because changes to the module hierarchy break a parent's references to its childrens' parameters. 
-Note that these broken references can be located anywhere in the design, often not located near the LC that inserts the new module.
+Note that these broken references can be located anywhere in the design
+and are often not located near the LC that inserts the new module.
 Overall, even nested-structs cannot guarantee a robust design, despite significantly reducing NLCs related to appending new leaf modules.
 Unsatisfied with lexical scoping for deeply nested generator hierarchies, we now turn our attention to dynamic scoping solutions.
 
@@ -487,10 +490,10 @@ A popular use of dynamic environments in the software world are those used for p
 Whereas shell languages in Unix systems have a first-class syntax for accessing environment values (e.g. \code{\$HOME}),
 attempts to implement environments in a previously existing HDL would have to explicitly pass the environment object through the module hierarchy to query it.
 Unfortunately, SystemVerilog and BluespecSV (as well as Verilog and VHDL) cannot support environments, as environments require either nested functions or HashMaps.
-While the SystemVerilog language includes associative arrays (similar to HashMaps), most SystemVerilog compilers do not support this language construct. 
+While the SystemVerilog language includes associative arrays (similar to HashMaps), most SystemVerilog compilers do not support it.
 This type of environment could be implemented in Bluespec or SystemVerilog using tagged unions or associative arrays.
 Unfortunately, neither language supports dynamically typed parameters, and thus cannot pass associative arrays as parameter objects.
-Bluespec requires all type checking be resolved prior to elaboration; since the compiler cannot guarantee that the returned value is type safe, associative arrays are not supported. 
+Bluespec requires that all type checking be resolved prior to elaboration; since the compiler cannot guarantee that the returned value is type safe, associative arrays are not supported. 
 Tagged unions, however, can be statically-type safe and used if the types of all parameters are known.
 While both BluespecSV and SystemVerilog claim support for tagged unions, many SystemVerilog compilers lack support for them.
 
@@ -512,8 +515,8 @@ define additional parameters at module instantiation time
 A module can use a reference to any other module to make a reference to that module's parameters' values. 
 Parameters are read-only, and queries return deep copies of mutable objects.
 Because Perl is a dynamically-typed language, no type checking can be done on the return type of parameter queries.
-The framework outputs XML to encapsulate the full ``configuration'', meaning the text description of how SystemVerilog module declarations are composed,
-and allow for iterative customization of certain parameters values within the design in accordance with the experimental design of external tools.
+The framework outputs XML to encapsulate the full ``configuration'', i.e., the text description of how SystemVerilog module declarations are composed.
+This organization allows for iterative customization of certain parameters values within the design in accordance with the experimental design of external tools.
 %Would need to explicitly rename parameters, can do this in multiple ways, including defining synonyms or referencing a parent's parameter. Adding parameters does require explicit renaming, no mechanism to reference child. Adding cde's would only benefit it, I think.
 
 \begin{figure}
@@ -571,13 +574,13 @@ module Core #(params)(...) :
 a new interstitial module that contains a new parameter (highlighted in red). Dynamic environments eliminate NLCs.}
 \label{fig:env-delta}
 \end{figure}
-Figure~\ref{fig:env-phdl} provides an oveview of the additional syntax we introduce to our pseudo-HDL in order to allow it to support instantiation, modification, and querying of environments.
+Figure~\ref{fig:env-phdl} provides an overview of the additional syntax we introduce to our pseudo-HDL in order to allow it to support instantiation, modification, and querying of environments.
 An important note is that the \code{++} operator, which adds a binding to the store, returns a new environment and does not affect the original environment.
 In addition, all values in key-value pairs are lazily evaluated only when a query matches on a particular key.
 
 Figure~\ref{fig:env} shows the code for our running example of the tile generator, modified to use the environment to supply parameters to all modules with two or more parameters.
 To parameterize a child module, a parent copies its own environment and adds/overwrites any needed key-value mappings before passing it to the child.
-While keys can be overridden in certain sub-modules, the overall namespace provided by the environment is flat, and does not codify anything about the structure of the module hierarchy.
+While keys can be overridden in certain sub-modules, the overall namespace provided by the environment is flat and does not codify anything about the structure of the module hierarchy.
 Figure~\ref{fig:env-delta} demonstrates the advantages of this flexiblity by applying both of the modifications from previous case study examples
 (replacing the appended \code{FPU} with \code{PFPU} and inserting \code{CacheWithPF}).
 Significantly, the only changes required are LCs and TLCs, with no NLCs whatsoever.
@@ -586,20 +589,21 @@ Even the cross-module assertion on cache sizes in \code{Tile} does not require m
 Although the environment passing paradigm succeeds in removing all NLCs,
 there is an additional LC required to rename the \code{icSize} parameter to \code{size}.
 Why does \code{CacheWithPF} query for \code{size} instead of \code{icSize}?
-The generator designer wanted it to be composable with any cache, not bind it to a particular instance.
-We should not contextualize the parameter name (e.g. change \code{size} to \code{icSize}) because the sub-module that is instantiated, in a different design, could be a data cache. 
+The generator designer engineered it to be composable with any cache, and to avoid binding it to a particular instance.
+We should not contextualize the parameter name (e.g., change \code{size} to \code{icSize}),
+because in a different design the sub-module that is instantiated could be a data cache. 
 Thus, an explicit renaming step is necessary to customize the parameter environment passed to \code{CacheWithPF}, telling it which top-level parameter to use
 in response to any internal queries made regarding \code{size}.
-We consider the source code change required to perform the renaming by modifying the environment an LC rather than an NLC because it always occurs in conjunction
+We consider the source code change, required to perform the renaming by modifying the environment, an LC rather than an NLC, because it always occurs in conjunction
 with the LC that instantiates the newly inserted module.
 However, it is worth noting that the renaming must be performed for each unique instance of the module that takes on a different, heterogeneous value.
 
-In general, we will often have modules that have either intentionally picked a context-free key, or simply use parameter keys that coincidentally overlap with those
+In general, we will often have modules that have either intentionally picked a context-free key or have simply used parameter keys that coincidentally overlap with those
 used by some other imported generator.
 Differentiating these conflicting keys and assigning them to the proper top-level key bindings is both the power and the burden of the dynamic environment paradigm.
 For designs that do not have a large number of parameter key collisions, environment passing is a great solution as it will significantly reduce the number of NLCs. 
-Unfortunately, in the not uncommon case of designs that have many instances of the same child module class (e.g. a mesh of routers), the re-mapping of unique top-level parameters onto generic, re-used child parameters
-that must occur every time one of these children is instantiated becomes onerous.
+Unfortunately, in the prevalent case of designs that have many instances of the same child module class (e.g., a mesh of routers), the re-mapping of unique top-level parameters onto generic, re-used child parameters,
+that must occur every time one of these children is instantiated, becomes onerous.
 To mitigate this burden through the use of geographic information, we now turn to context-dependent environments.
 
 \section{Context-Dependent Environments}
