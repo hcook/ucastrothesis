@@ -754,7 +754,9 @@ Acquires and Releases include their source id, and Probes and Grants are supplie
 The Client id format and numbering is determined by the characteristics of the physical network and is encapsulated from TileLink.
 This interface does include a Finish channel so that the manager knows when to register the transaction as complete.
 
-TODO: Multiple clients or managers on a port.
+Clients and managers may share a network port of the associated type as long as their pools of transaction IDs are unique.
+In practice, we often support this requirement by utilizing routers that automatically prepend bits to the \code{client\_xact\_id} field
+for outgoing messages, while using the same bits to route incoming messages.
 
 \section{TileLink Parameters}
 
@@ -762,18 +764,7 @@ This section defines a set of parameters that are exposed by the TileLink to the
 Table~\ref{tab:tlparams} provides an overview of the available parameters.
 The majority are used to determine the widths of the various channels fields that we have previously discussed.
 
-
-We use the Context Dependent Environments described in Chapter~\ref{c.parameters} to define and supply these values
-at each level of the memory hierarchy during the hardware elaboration process.
-Presently, we encode all parameters with a single Scala case class, and then supply an instance of that class in
-response to query points within the Modules and Bundles that serve as Tilelink endpoints or channels.
-Each case class corresponds to a single TileLink realm.
-We also provide a geographical ~\code{TileLinkKey} that external generators can use to specialize heterogenous TileLink
-networks when multiple networks are instantiated within a given chip, by providing a different case class for each realm.
-
-TODO: Description of how to use CDEs to provide two sets of parameter values to a single hierarchical module.
-
-\begin{table}[ht]
+\begin{table}[t]
 \begin{center}
 \begin{tabular}{|l|l|l|}
     \hline
@@ -790,13 +781,88 @@ TLMaxManagerXacts & Int & Max number of concurrent transactions per manager \\ \
 TLBlockAddrBits & Int & Address size \\ \hline
 TLDataBits & Int & Amount of block data sent per beat, must be >= XLEN \\ \hline
 TLDataBeats & Int & Number of beats per cache block \\ \hline
-TLNetworkIsOrderedP2P & Boolean & Whether the underlying physical network \\
-                      &         & preserved point-to-point ordering of messages \\ \hline
+%TLNetworkIsOrderedP2P & Boolean & Whether the underlying physical network \\
+%                      &         & preserved point-to-point ordering of messages \\ \hline
 \end{tabular}
 \end{center}
 \caption{Exposed top-level TileLink independent parameters. These are set for each level of the memory hierarchy.}
 \label{tab:tlparams}
 \end{table}
+
+We use the Context Dependent Environments described in Chapter~\ref{c.parameters} to define and supply these values
+at each level of the memory hierarchy during the hardware elaboration process.
+Presently, we encode all parameters with a single Scala case class, and then supply an instance of that class in
+response to query points within the Modules and Bundles that serve as Tilelink endpoints or channels.
+Each case class corresponds to a single TileLink realm.
+We also provide a geographical \code{TileLinkKey} that external generators can use to specialize heterogenous TileLink
+networks when multiple networks are instantiated within a given chip, by providing a different case class for each realm.
+
+Figure~\ref{fig:tlgeo} outlines of sketch of how we can provide multiple configurations of TileLink to an individual Module using CDEs.
+The trick is to use Parameter each to represent the inner and outer TileLink. 
+These parameters can be bound to specific instances of TileLinkParameters defined in the top-level definitions.
+The recursive use of Parameters here allows for another level of indirection, which in turn allows each agent
+in a hierarchical tree of agents to be specialized according to the parameters of its inner and outer network.
+The code inside of the agents refers to them purely in terms of ``inner'' and ``outer,'' without
+requiring any further knowledge of where it exists in the global hierarchy.
+This encapsulation of geographical information and indirection based on nested parameter values would not be possible without
+the capabilities afforded us by deploying CDEs.
+
+\begin{figure}
+\centering
+\begin{scala}
+case class TileLinkParameters(
+    coherencePolicy: CoherencePolicy,
+    nManagers: Int,
+    nClients: Int,
+    dataBits: Int,
+    dataBeats: Int = 4,
+    overrideDataBitsPerBeat: Option[Int] = None
+    ) {
+  val writeMaskBits: Int  = ((dataBits / dataBeats) - 1) / 8 + 1
+  val dataBitsPerBeat: Int = overrideDataBitsPerBeat.getOrElse(dataBits / dataBeats)
+}
+
+case object TLKey extends Field[TileLinkParameters]
+
+/** Identifies the TLId of the inner network in a hierarchical cache controller */
+case object InnerTLId extends Field[String]
+
+/** Identifies the TLId of the outer network in a hierarchical cache controller */
+case object OuterTLId extends Field[String]
+
+trait HasCoherenceAgentParameters {
+  implicit val p: Parameters
+  val outerTLId = p(OuterTLId)
+  val outerTLParams = p(TLKey(outerTLId))
+  val outerDataBeats = outerTLParams.dataBeats
+  ...
+  val innerTLId = p(InnerTLId)
+  val innerTLParams = p(TLKey(innerTLId))
+  val innerDataBeats = innerTLParams.dataBeats
+}
+
+class DefaultConfig extends Config (
+  topDefinitions = { (pname,site,here) =>
+    ...
+      case BuildL2CoherenceManager => (id: Int, p: Parameters) =>
+        Module(new L2BroadcastHub()(p.alterPartial({
+          case InnerTLId => "L1toL2"
+          case OuterTLId => "L2toMC" })))
+      case TLKey("L2toMC") =>
+        TileLinkParameters(
+          coherencePolicy = new MEICoherence(...)
+          nCachingClients = site(NBanksPerMemoryChannel), ...)
+      ...
+})
+
+\end{scala} 
+\caption{
+An example of using recursive parameters to encapsulate geographic information, such that a single Module can make use of
+two heterogeneous TileLink networks.
+This capability is essential for creating hierarchical trees of coherence agents.
+}
+\label{fig:tlgeo}
+\end{figure}
 
 \section{Discussion and Future Work}
 
@@ -823,7 +889,8 @@ While all extant implementations provide coherence over on-chip networks in on-c
 there is no fundamental reason why TileLink could not be applied to multi-chip shared memory designs.
 However, in addition to requiring new modules to implement classical in-memory directories,
 certain classes of optimizations may prove to be critical to performance for which TileLink, as specified here, cannot provide.
-In addition to the aforementioned client-to-client transfers, large-scale coherence protocols often include elements of speculation and rollback that we have yet to attempt to express within the TileLink transaction structure.
+In addition to the aforementioned client-to-client transfers, large-scale coherence protocols often include
+elements of speculation and rollback that we have yet to attempt to express within the TileLink transaction structure.
 Other design decisions may prove unnecessarily detrimental in the bandwith/latency space of chip-to-chip communications.
 It is unclear whether addressing these concerns is best done within the context of TileLink, or whether we would
 do better to keep the specification specialized for the on-chip domain and fall back on other
@@ -835,7 +902,7 @@ Interoperability with AXI has already been shown with roof-of-concept prototypes
 Plans are already underway to provide converters to RapidIO bus architectures as well.
 One remaining challenge is to see where support for conversions between TileLink's user-defined, custom coherence states and message types and other coherence protocols,
 such as ARM's AXI-based ACE or IBM's CAPI.
-I think TileLink's use of the memory opcodes discussed in Appendix~\ref{a.memopcodes} may provide the key to inter-protocol conversions of this sort.
+TileLink's use of the memory opcodes, discussed in Appendix~\ref{a.memopcodes}, may provide the key to inter-protocol conversions of this sort.
 
 Finally, we are working to develop a complete formal specification of the TileLink interface.
 Our current approach uses logical clocks to define the manager/client interface in terms of composable transducers.
