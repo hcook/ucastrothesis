@@ -1,14 +1,34 @@
-\chapter{Object-Oriented Descriptions of Cache Coherence Policies}
+\chapter{Object-Oriented Flow Descriptions of Cache Coherence Policies}
 \label{c.coherence}
 
+Designing new cache coherence protocols or supporting a wider variety of more complicated protocols is not a task hardware engineers can undertake lightly.
+Verifying the correctness of a cache coherence protocol is a challenging task, and
+verifying that a correct protocol has been implemented correctly (using simulations or silicon) is even more difficult
+\cite{deorio2008post, bentley2001validating, burckhardt2005verifying, clarke1995verification, dill1992protocol, wood1990verifying}.
+Traditionally, protocol correctness is verified using an abstracted version of the distributed system of caches upon which the protocol operates
+\cite{talupur2008going, delzanno2003constraint, pong1997verification, wood1990verifying, mcmillan2001parameterized}.
+The abstraction employed at this stage makes the verification process tractable by eliding many details of the underlying modules' implementations.
+Upon verification of protocol correctness, hardware designers must then use a hardware description language (HDL) to write cache controller logic that correctly implements the protocol.
+Unfortuntately, the semantic gap between high-level abstract descriptions of protocols and 
+concrete HDL implementations of those same protocols is so wide that verifying the correctness of the protocol
+does not come close to guaranteeing the correctness of the final implementation \cite{dave-memocode05}.
+There are a huge number of ways in which details of the implementation can interfere with the behavior of the coherence protocol.
+Hardware designers must work from scratch to manually maintain the implicit semantics of the abstracted protocol model in the controllers and networks they build.
+Many modules designed by different teams must interact in the expected ways.
+State machines must be correctly transliterated from the protocol's specification, possibly by hand.
 
-TileLink is a protocol designed to be a substrate for cache coherence transactions implementing a particular cache coherence policy within an on-chip memory hierarchy. 
-Its purpose is to orthogonalize the design of the on-chip network 
+As we will see, improving the capabilities of HDLs offers us a path foward to lighten this design burden.
+By raising the level of abstraction at which cache controller logic can be described and at which synthesizable designs can be generated,
+we can smooth over the gap between protocol specification and implementation.
+
+In the previous chapter, I presented TileLink,
+a protocol designed to be a substrate for cache coherence transactions implementing a particular cache coherence policy within an on-chip memory hierarchy. 
+TileLink's purpose is to orthogonalize the design of the on-chip network 
 and the implementation of the cache controllers from the design of the coherence protocol itself.
 Any cache coherence protocol that conforms to TileLink’s transaction structure 
 can be used interchangeably with the physical networks and cache controllers we provide.
 
-This chapter describes the API available to implementers of client caches, 
+This chapter builds on that framework by describing the API available to implementers of client caches, 
 manager caches or manager directories. 
 The abstraction provided by the API separates the concerns of the controller design
 from the concerns of the protocol design, 
@@ -25,22 +45,133 @@ and any particular cache controller can store either or both types.
 
 \section{Background} 
 
+Designing new cache coherence protocols or supporting a wider variety of more complicated protocols is not a task hardware engineers can undertake lightly.
+Verifying the correctness of a cache coherence protocol is a challenging task, and
+verifying that a correct protocol has been implemented correctly (using simulations or silicon) is even more difficult
+\cite{deorio2008post, bentley2001validating, burckhardt2005verifying, clarke1995verification, dill1992protocol, wood1990verifying}.
+Traditionally, protocol correctness is verified using an abstracted version of the distributed system of caches upon which the protocol operates
+\cite{talupur2008going, delzanno2003constraint, pong1997verification, wood1990verifying, mcmillan2001parameterized}.
+
+Memory access patterns can general be grouped at a high level into a few common sharing patterns, such as read-modify-write, producer-consumer, and migratory. Systems that support adaptive cache coherence protocols allow the behavior of the protocol to change with detected changes in program behavior.  Examples of such adaptive protocols in the distributed memory space include \cite{amza-hpca97,lebeck-archnews95,stenstrom-isca93,cox-isca93}. Note that these designs have a single protocol, but one that varies its behavior dynamically.
+
+In the shared memory space, designs like FLASH \cite{kuskin-archnews94} have incorporated multiple protocols on top of a single hardware substrate in order to provide adaptability. Generally transitions between protocols have been triggered by heuristic mechanisms \cite{mukherjee-archnews98}. Others \cite{chandra-sigplan96,falsafi-sc94} have proposed creating application-specific protocols that are tailored to match a particular application's needs.
+
+Flows and transactions for verification.
+
+DSLs for describing protocol behavior. Continuations.
+
+
 \section{Architecture} 
 
-\section{Hierarchical Translation}
+\subsection{Flows}
 
-\section{Client Metadata} 
+In this paper, we show that message flows are a succinct and
+readily available source of high-level invariants that usually go
+unused in protocol verification. A message flow is a sequence
+of messages sent among processors following a protocol that
+logically constitutes a single transaction of the protocol. Flows
+are often illustrated by protocol designers in the form of
+message sequence charts.
 
-ClientMetadata consists of a set of bits that abstracts the “state” of a certain cache block,
-w.r.t. the permissions available on that block inside this particular client cache controller.
+Protocol designers use message flows to describe
+the basic organization of a protocol and to reason about the
+protocol itself.
+Message flows implicitly impose constraints
+on the order in which the actions appearing within them can happen:
+Each action can happen only after the preceding action has been executed
+
+Message flows — similar to message sequence charts — are a natural,
+local, linear way for us to think about system behavior in place
+of global, monolithic, system-wide invariants
+
+The simplest flows are linear ordering of events usually involving two agents
+Each entry in the flow is either a simple event, 
+corresponding to a single protocol update being committed or a sub-flow recursively composed of simple events.
+The notion of sub-flow allows us to
+chop up a complicated flow into smaller units such that each
+unit shows interaction between two or more agents engaged in a tightly-coupled causal interaction.
+an event might have multiple preceding actions
+Similarly, an event in the flow might have more than one succeeding event
+Flows may only express a partial order of events and not a total order.
+For all of the above reasons, best to represent them as a Directed Acyclic Graph.
+
+Non-interference between flows: which flows are allowed to execute in the system at the same time.
+Can be expressed as rules.
+In general for our family of coherence protocols, these rules are reflected in the TileLink substrate specified in the previous chapter.
+Correct implementations of TileLink by definition enforce the non-interference rules needed by our flows.
+
+\subsection{From Flows to Local Transactions}
+
+Recognizing that a global flow can be divided into sub-flows is useful for providing non-interference lemmas to CMP-based formal verification tools \cite{}.
+However, it also provides a mechanism for us to decompose and re-aggregate the contents of sub-flows based on their geographical location.
+In other words, each flow touch several distinct agents, and we can collect all those found within an individual agent type in our cache coherence shared memory system.
+Then, if we can generate controllers that are capable of performing each sub-flow atomically, as well as send messages to other agents,
+we will have furnished ourselves with a substrate that is correct by construction.
+
+In this section we present an algorithm for turning a collection of flows into multiple collections of localized sub-flows.
+First, we express the flows as DAGs in Scala, where vertices are events and edges are happens-before dependencies.
+Next, we walk each DAG looking for components that are separable sub-graphs of events that all occur at the same agent.
+We can sever the graph around these points, leaving us with input vertices that represent receiving a message of a particular type.
+These input nodes are the events that kick off local sub-transactions.
+Conversely, these mini-DAGs may also contain nodes that require sending a message to anothe agent or agents.
+
+Once we have partitioned all the DAGs, it is trivial to collect the set of sub-flows from each flow that correspond with a particular agent type.
+This per-type set then forms the basis of the operations that we will expect this agent to be able to perform atomically.
+In the next section we discuss how to turn any of these collections of localized sub-flows into a cache or directory controller.
+
+\subsection{Expressing Localized Sub-Flows and Their Dependencies}
+
+Taking a collection of sub-flows that must be implemented by the particular agent we are designing,
+our task is now to 
+We do this by creating Transaction Status Handling Registers (TSHRs).
+One type of TSHR for each sub-flow, with some capable of merging multiple sub-flows.
+In order to make a
+provide a way to execute the actions themselves, as well as to implement the dependencies between actions for each flow.
+
+Ideally, we would factor our HDL code such that code describing the common actions and their dependencies are encapsulated,
+but made avaulable to each TSHR that needs it.
+Scala's traits are perfect for this factoring, as we will show in the following examples.
+Each trait consists of functions that actually update state or send a message (i.e., execute a sub-flow).
+
+Update functions related to each port or data structure are provided in specific traits, for example...
+Scoreboard of ``pending'' bits track the flow of data and the progress of the transaction.
+Dependencies from sub-flow to the next are expressed inside of the trackers themselves,
+by referencing the pending bits and connecting each action to the next.
+Trackers also contain code to implement the global rules restricting what flows are allowed to execute at the same time.
+
+Examples of tracker code.
+
+
+\section{Abstracting Coherence Policies with Metadata Objects}
+
+While decomposing flows into traits has proven to be an effective strategy for managaing concurrency and complexity in cache controller design,
+this approach says nothing about how different coherence policies are represented within the flows.
+For example, what do the state update functions actually store in the metadata arrays?
+How are the required messages sent between agents actually created?
+Our goal in this section is to address these questions, and moreover to 
+hold some parts of the controller design constant, while swapping out only the
+elements of controllers that are different between different policiies.
+To this end, we created a unified CoherencePolicy interface abstraction that provides the functionality required to implement the specified sub-flows.
+Specifically, we built an object-oriented API based around an abstraction of coherence policy metadata.
+
+In the object-oriented programming (OOP) paradigm, \emph{``objects''} are abstractions that contain \emph{fields} of data that are mutated and accessed by procedural \emph{methods}.
+In OOP, computer programs are designed by making them out of objects that interact with one another.
+In our case, we are forming critical portions of the cache controller logic by interacting with metadata that is stored.
+
+
+\subsection{Client Metadata} 
+
+A ClientMetadata object consists of a set of bits that abstracts the “state” of a certain cache block,
+with respect to the permissions that the policy has made available on that block inside this particular client cache controller.
 The metadata may also store other information about the cache block,
 for example whether it has been dirtied by a store operation.
 The complete API for ClientMetadata can be found in the scaladoc, but we provide a summary here.
 There are three types of calls that a controller can make against the API:
 permissions checks, message creations, and metadata updates.
 
-\subsection{Permissions Checks}
+\subsubsection{Permissions Checks}
 
+Read or write.
 
 These boolean functions answer questions about the permissions on a cache line, and in particular are used to determine what actions to take relative to specific memory operations.
 
@@ -65,7 +196,7 @@ If true, the control needs to initiate a TileLink coherence transaction using ma
 \end{description}
 
 
-\subsection{Message Creation}
+\subsubsection{Message Creation}
 
 These functions return TileLink channel bundles based on the combination of current metadata state and particular memory operations.
 
@@ -80,7 +211,7 @@ Constructs a Release message based on this metadata for a capacity eviction.
 Constructs a Release message based on this metadata in order to respond to a Probe message from outer memory.
 \end{description}
 
-\subsection{Metadata Updates}
+\subsubsection{Metadata Updates}
 
 These functions return new ClientMetadata objects whose internal state has been updated based on a particular coherence event or message received.
 
@@ -95,14 +226,14 @@ New metadata after receiving a Probe message.
 New metadata after receiving a Grant message in response to the pending memory operation.
 \end{description}
 
-\subsection{On Reset}
+\subsubsection{On Reset}
 
 We provide the ClientMetadata.onReset function to initialize any metadata storage arrays within a particular cache.
 
-\section{ManagerMetadata API} 
+\subsection{ManagerMetadata API} 
 
 ManagerMetadata is a set of bits that abstracts the “state” of certain cache block,
-w.r.t. the existence of copies of that block in all the client caches
+with respect to the existence of copies of that block in all the client caches
 managed by this manager cache controller.
 The metadata may also store other information about the cache block,
 for example a information about its movement pattern or ownership.
@@ -111,7 +242,7 @@ but we provide a summary here.
 There are three types of calls that a controller can make against the API:
 permissions checks, message creations, and metadata updates.
 
-\subsection{Permissions Checks}
+\subsubsection{Permissions Checks}
 
 These boolean functions answer questions about the permissions on a cache line, and in particular are used to determine what actions to take relative to specific memory operations.
 
@@ -124,7 +255,7 @@ Does this memory operation require Probes to be sent to all clients with copies?
  Does an eviction caused by a capacity missed require Probes to be sent to all clients with copies?
 \end{description}
 
-\subsection{Message Creation}
+\subsubsection{Message Creation}
 
 These functions return TileLink channel bundles to use as responses to Clients based on the combination of current metadata state and particular TileLink messages.
 
@@ -146,7 +277,7 @@ Used to respond to secondary misses merged into this transaction.
 May contain single or multiple beats of data.
 \end{description}
 
-\subsection{Metadata Updates}
+\subsubsection{Metadata Updates}
 
 These functions return new ManagerMetadata objects whose internal state has been updated based on a particular coherence event or message.
 
@@ -157,7 +288,7 @@ New metadata after receiving a Release message.
 New metadata after sending a Grant message.
 \end{description}
 
-\subsection{On Reset}
+\subsubsection{On Reset}
 
 We provide the ManagerMetadata.onReset function to initialize
 any metadata storage arrays within a particular cache.
@@ -202,6 +333,30 @@ Provide the id of the sharer that should be contacted next
 Provide a full bitmap of all sharers, with 1 indicating a copy.
 \end{itemize}
 
+\section{Hierarchical Translation}
+
+Handled via opcodes.
+Hierarchical agent has both ClientMetadata and ManagerMetadata. 
+Check the opcode against the ClientMetadata to launch a transaction in the next level.
+(TileLink determines the ordering/interleaving of the outer transaction with the inner transaction;
+CoherencePolicy's job is to determine which outer transaction is needed.)
+
+
 \section{Software Control}
 
+We want to allow hooks for software control of coherence states.
+Also handled via opcodes targetting individual cache blocks.
+Trigger voluntary releases
+See appendix.
 
+Also want to enable software control of which protocol to use? Mode switch.
+
+\section{Performance of Different Protocols in Rocket Chip}
+
+\section{Discussion and Future Work}
+
+Verification
+
+Automatic generation of controllers via rules.
+
+\section{Conclusion}
