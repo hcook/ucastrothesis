@@ -21,9 +21,16 @@ deps += parameters/parameters.tex
 cleans += parameters/parameters.aux
 
 # Chapter Three
-deps += tilelink/tilelink.tex tilelink/memopcodes.tex
+deps += tilelink/tilelink.tex
 cleans += tilelink/tilelink.aux
 
+# Chapter Four
+deps += coherence/coherence.tex
+cleans += coherence/coherence.aux
+
+# Appenices
+deps += appendix/swmem.tex appendix/memopcodes.tex
+cleans += appendix/swmem.aux appendix/memopcodes.tex
 
 # The thesis itself. We move the PDF to a new filename so that viewers
 # don't keep on trying to reload the file as it's being written and
