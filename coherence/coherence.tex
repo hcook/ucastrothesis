@@ -1,5 +1,54 @@
-\chapter{Object-Oriented Flow Descriptions of Cache Coherence Policies}
+\chapter{Productive Abstractions of Cache Coherence Policies}
 \label{c.coherence}
+
+In a multicore chip with a sizeable hierarchy of on-chip caches,
+the majority of the data movement activity that occurs within the chip
+is done automatically, in accordance with a cache coherence protocol.
+The cache coherence protocol is implemented by the system of cache and memory controllers distributed across the chip.
+Since traditional cache coherence protocols preserve the abstraction of a global memory shared by all the cores,
+the controllers must work behind-the-scenes to keep copies of data in the right places,
+while managing tradeoffs between communication volume, storage capacity and performance.
+We predict going forward that, due to the increased percentage of energy consumpution taken up by the memory hierarchy,
+that customizable, heterogenous cache coherence policies that minimize data movement for particular use cases
+will become an increasingly desirable feature of an on-chip memory hierarchy.
+How to define customizable coherence policies, implement the associated protocols efficiently,
+and manage the aforementioned communication/performance tradeoff is an important design challenge for future energy-efficient architectures. 
+
+Unfortunately, designing more complex, customizable cache coherence protocols is not a task hardware engineers can undertake lightly.
+Protocol correctness can be determined via formal analysis of an abstract model of the protocol and memory system.
+However, there are a huge number of ways in which details of the concrete implementation can undermine abstract correctness.
+As in any distributed system, modules designed by different teams may interact in unexpected ways,
+and assumptions about atomically visible behaviors or event priority levels may be violated,
+leading to corrupted data or system deadlock.
+Hardware designers shoulder the burden of maintaining the implicit semantics of the abstracted protocol model
+throughout the concrete controllers and networks that they build.
+This chapter proposes that improving the capabilities of HDLs offers us a path foward to lighten this design burden.
+By raising the level of abstraction at which cache controller logic can be described,
+and from which synthesizable designs can be generated,
+we can smooth over the gap between protocol specification and implementation.
+
+In the previous chapter, I presented TileLink,
+a protocol framework designed to be a substrate for cache coherence transactions that implement a particular cache coherence policy within an on-chip memory hierarchy. 
+TileLink provides structure in the form of sequences of messages that can be sent between interacting, coherent agents in order
+to implement a protocol that is guaranteed to be deadlock free in a nested, hierarchical memory system.
+However, TileLink by design says nothing about the particular details of the coherence policy,
+which drives the creation and use of these message types.
+Filling in details is a task left up to the designers of the cache controllers.
+
+This chapter fills in the aforementioned gaps in the TileLink framework by introducing two further abstractions.
+The first is a high-level language,
+called \emph{message flows},
+taken from the verification literature, 
+that describes all the global transactions that make up a particular coherence protocol.
+A collection of flows describe every sequence of actions that a protocol can take,
+where actions consist of sending TileLink messages and accessing  data and metadata in local memories.
+The second abstraction is \emph{coherence metadata objects}.
+These objects encapusulate the states that distinguish protocol message flows from one another,
+and provide methods for generating TileLink messages and making policy-based decisions within flow transactions.
+The abstraction provided by the metadata objects separates the concerns of the controller design from the concerns of the policy design, 
+while the TileLink substrate ensures forward progress of global protocol transactions.
+
+\section{Background} 
 
 Designing new cache coherence protocols or supporting a wider variety of more complicated protocols is not a task hardware engineers can undertake lightly.
 Verifying the correctness of a cache coherence protocol is a challenging task, and
@@ -12,64 +61,72 @@ Upon verification of protocol correctness, hardware designers must then use a ha
 Unfortuntately, the semantic gap between high-level abstract descriptions of protocols and 
 concrete HDL implementations of those same protocols is so wide that verifying the correctness of the protocol
 does not come close to guaranteeing the correctness of the final implementation \cite{dave-memocode05}.
-There are a huge number of ways in which details of the implementation can interfere with the behavior of the coherence protocol.
-Hardware designers must work from scratch to manually maintain the implicit semantics of the abstracted protocol model in the controllers and networks they build.
-Many modules designed by different teams must interact in the expected ways.
-State machines must be correctly transliterated from the protocol's specification, possibly by hand.
 
-As we will see, improving the capabilities of HDLs offers us a path foward to lighten this design burden.
-By raising the level of abstraction at which cache controller logic can be described and at which synthesizable designs can be generated,
-we can smooth over the gap between protocol specification and implementation.
+I am not the first to propose using a higher level of abstraction to describe cache coherence protocol behavior.
+The following approaches each offer a Domain Specific Language (DSL)
+built around an abstraction of state machines that perform certain actions when certain conditions are met.
+This conditional execution model is a good fit for the requirements of a coherent cache controller,
+which must update metadata and data based on a series of messages it sends and receives.
+Each high-level description is used to drive the creation of implementations (synthetizable hardware or simulator code),
+as well as correctness (verification rules or documentation) from the same source.
 
-In the previous chapter, I presented TileLink,
-a protocol designed to be a substrate for cache coherence transactions implementing a particular cache coherence policy within an on-chip memory hierarchy. 
-TileLink's purpose is to orthogonalize the design of the on-chip network 
-and the implementation of the cache controllers from the design of the coherence protocol itself.
-Any cache coherence protocol that conforms to TileLink’s transaction structure 
-can be used interchangeably with the physical networks and cache controllers we provide.
+Teapot \cite{chandra-dsl97, chandra-sigplan96}
+is a Pascal-based DSL for describing coherence protocols using ``continuations'' as an abstraction.
+A Teapot program consists of a set of states; each state
+specifies a set of message types and the actions to be
+taken on receipt of each message, should it arrive for a
+cache block in that state.
+Teapot provides suspend/resume semantics within each state-based description;
+these continuations are used to automatically infer the set of intermediate states and handle unexpected messages.
+Continuations in Teapot allow developers to avoid having to manually decompose
+a handler into atomically executable pieces and sequence them. 
+Teapot outputs C code for distributed memory implementations and $Mur\phi$ models for verification.
 
-This chapter builds on that framework by describing the API available to implementers of client caches, 
-manager caches or manager directories. 
-The abstraction provided by the API separates the concerns of the controller design
-from the concerns of the protocol design, 
-while the TileLink substrate ensures forward progress of protocol transactions. 
-By making calls against this object-oriented API, cache controller designers can
-create state machines that clearly and correctly implement metadata updates. 
-Conversely, designers of new coherence protocols are provided a framework
-within which to implement their protocol: filling out the response to each API call.
+Bluespec SystemVerilog (BSV) \cite{bluespec}
+is an HDL that produces synthesizeable hardware implementations based on an absraction called guarded atomic actions (GAAs).
+BSV has been proposed a a particularly suitable language for describing distributed cache coherence controllers \cite{dave-memocode05}.
+GAAs consist of a guard (boolean logic predicate), and an action (some kind of state update)
+that is executed atomically by the hardware control logic when the predicate evaluates to true.
+Becuase GAAs are also an abstraction that are compatible with many formal verification tools,
+and because the BSV compiler produces implementations of rules automatically,
+verification overhead for implementations of coherence protocols in this language should be reduced.
 
-Metadata objects are the fundamental abstraction used in this API.
-These objects are opaque sets of bits which are processed and mutated by the coherence policy API.
-Metadata are divided into client-side and manager-side classes,
-and any particular cache controller can store either or both types.
+The gem5 simulation environment \cite{binkert-sigarch11}
+provides SLICC, a DSL for generating state machines for coherence protocols.
+SLICC consists of descriptions of individual controller state machines in terms of events, as well as the set of available message types
+used to communicate between controllers.
+The SLICC compiler outputs C++ simulator code and HTML documentation.
 
-\section{Background} 
+All of the above approaches are based on specifying local descriptions of pieces of a global coherence transaction;
+when the state machines they describe are interconnected, the intention is to produce correct global behavior.
+This approach reflects a bottom-up philosophy to protocol implementation.
+In contrast, we wished to adopt a top-down approach, wherein a global description of transactions
+is decomposed into local sub-transactions, which then drive the design of the individual controllers.
+We therefore turned to the verification literature to find verification strategies based on expressing global descriptions of protocol behavior.
+While many transactional models of coherence protocols have been proposed,
+the one best suited to our goals was the \emph{message flow} approach to parameterized procotol verification
+\cite{talupur2008going, oleary-fmcad09}.
+A message flow is a sequence of messages sent among agents following a protocol that
+logically constitutes a single transaction of the protocol. 
+In the next section, we discuss how a global, flow-based description of a protocol can be decomposed into a set
+of local controller transactions, and discus how we implement those local transactions in Chisel,
+our meta-HDL/DSL embedded in Scala.
 
-Designing new cache coherence protocols or supporting a wider variety of more complicated protocols is not a task hardware engineers can undertake lightly.
-Verifying the correctness of a cache coherence protocol is a challenging task, and
-verifying that a correct protocol has been implemented correctly (using simulations or silicon) is even more difficult
-\cite{deorio2008post, bentley2001validating, burckhardt2005verifying, clarke1995verification, dill1992protocol, wood1990verifying}.
-Traditionally, protocol correctness is verified using an abstracted version of the distributed system of caches upon which the protocol operates
-\cite{talupur2008going, delzanno2003constraint, pong1997verification, wood1990verifying, mcmillan2001parameterized}.
-
+So far we have discussed prior art in how to describe and implement protocols,
+and we now progress from how to build protocols to what protocols to implement. 
+Heterogeneity in memory access behavior as been a major focus of study for distributed shared memory systems.
 Memory access patterns can general be grouped at a high level into a few common sharing patterns, such as read-modify-write, producer-consumer, and migratory. Systems that support adaptive cache coherence protocols allow the behavior of the protocol to change with detected changes in program behavior.  Examples of such adaptive protocols in the distributed memory space include \cite{amza-hpca97,lebeck-archnews95,stenstrom-isca93,cox-isca93}. Note that these designs have a single protocol, but one that varies its behavior dynamically.
 
 In the shared memory space, designs like FLASH \cite{kuskin-archnews94} have incorporated multiple protocols on top of a single hardware substrate in order to provide adaptability. Generally transitions between protocols have been triggered by heuristic mechanisms \cite{mukherjee-archnews98}. Others \cite{chandra-sigplan96,falsafi-sc94} have proposed creating application-specific protocols that are tailored to match a particular application's needs.
+These efforts indicate that multiple protocols can share the same underlying communication framework and memory system,
+which served as an inspiration for the TileLink/CoherencePolicy separation of interests described in this chapter and the previous.
 
-Flows and transactions for verification.
+\section{Protocol Message Flows}
 
-DSLs for describing protocol behavior. Continuations.
-
-
-\section{Architecture} 
-
-\subsection{Flows}
-
-In this paper, we show that message flows are a succinct and
+Talupur and Tuttle showed that message flows are a succinct and
 readily available source of high-level invariants that usually go
-unused in protocol verification. A message flow is a sequence
-of messages sent among processors following a protocol that
-logically constitutes a single transaction of the protocol. Flows
+unused in protocol verification. 
+Flows
 are often illustrated by protocol designers in the form of
 message sequence charts.
 
@@ -142,13 +199,27 @@ Trackers also contain code to implement the global rules restricting what flows 
 Examples of tracker code.
 
 
-\section{Abstracting Coherence Policies with Metadata Objects}
+\section{Object-Oriented Coherence Policies}
+
+the object-oriented interface
+we have defined and made available to implementers of client cache agents, manager cache agents or manager directories. 
+By making calls against this object-oriented API, cache controller designers can
+create state machines that clearly and correctly implement metadata updates. 
+Conversely, designers of new coherence protocols are provided a framework
+within which to implement their protocol: filling out the response to each API call.
+
+Metadata objects are the fundamental abstraction used in this API.
+These objects are opaque sets of bits which are processed and mutated by the coherence policy API.
+Metadata are divided into client-side and manager-side classes,
+and any particular cache controller can store either or both types.
+
+Policy as opposed to protocol?
 
 While decomposing flows into traits has proven to be an effective strategy for managaing concurrency and complexity in cache controller design,
 this approach says nothing about how different coherence policies are represented within the flows.
 For example, what do the state update functions actually store in the metadata arrays?
-How are the required messages sent between agents actually created?
-Our goal in this section is to address these questions, and moreover to 
+How are the messages required to be sent between agents actually created?
+In this section we prensent an interface address these questions, and moreover to 
 hold some parts of the controller design constant, while swapping out only the
 elements of controllers that are different between different policiies.
 To this end, we created a unified CoherencePolicy interface abstraction that provides the functionality required to implement the specified sub-flows.
@@ -156,8 +227,16 @@ Specifically, we built an object-oriented API based around an abstraction of coh
 
 In the object-oriented programming (OOP) paradigm, \emph{``objects''} are abstractions that contain \emph{fields} of data that are mutated and accessed by procedural \emph{methods}.
 In OOP, computer programs are designed by making them out of objects that interact with one another.
-In our case, we are forming critical portions of the cache controller logic by interacting with metadata that is stored.
+In our case, we are forming critical portions of the cache controller logic by interacting with metadata about cache blocks that is stored in local memories.
+The specific format of the metadata can be changed without changing the methods that cache controller transactions use,
+allowing these aspects to be developed independently, and different metadata implementations to be swapped in easily.
 
+
+Based on the TileLink structure, we know that their are two kinds of Metadata.
+ClientMetadata stores the permissions available to a client in the face of incoming memory operations on a particular block
+They may also store protocol-specific information about the block, such as whether or not it has been dirtied by a write.
+ManagerMetadata store information about how the block has propagated through the clients for which this manager is responsible.
+This might include some representation of the number of client sharers, or patterns of movement observed on that block.
 
 \subsection{Client Metadata} 
 
@@ -171,23 +250,23 @@ permissions checks, message creations, and metadata updates.
 
 \subsubsection{Permissions Checks}
 
-Read or write.
-
 These boolean functions answer questions about the permissions on a cache line, and in particular are used to determine what actions to take relative to specific memory operations.
+Memory operation representations are discussed in Appendix~\ref{a.memopcodes}, but the salient feature is that
+all of them requires either read or read-and-write permissions.
 
 \begin{description}
 \item[isValid()]
 Is the block's data present in this cache?
-\item[isHit(op\_code: UInt)]
-Does this cache have permissions on this block sufficient to perform the specified memory op?
+\item[isHit(opcode: UInt)]
+Does this cache have permissions on this block sufficient to perform the specified memory operation?
 If true, the controller can perform the memory operation immediately.
-\item[isMiss(op\_code: UInt)]
+\item[isMiss(opcode: UInt)]
 Does this cache lack permissions on this block sufficient to perform the specified memory op?
 If true, the controller needs to initiate a TileLink coherence transaction using makeAcquire().
 \item[requiresAcquireOnSecondaryMiss(firstop: UInt, secondop: UInt)]
 Does a secondary miss on the block require another Acquire message?
 If true, in a controller that supports miss-under-miss transactions, initiate a second coherence transaction using makeAcquire().
-\item[requiresReleaseOnCacheControl(op\_code: UInt)]
+\item[requiresReleaseOnCacheControl(opcode: UInt)]
 Does a cache control operation (e.g. a voluntary flush) require a Release message to be sent to outer memory?
 If true, the control needs to initiate a TileLink coherence transaction using makeVoluntaryRelease.
 \item[requiresVoluntaryWriteback()]
@@ -295,26 +374,11 @@ any metadata storage arrays within a particular cache.
 This function can also be used to generate an empty ManagerMetadata object for API 
 use within controllers that do not store any metadata (for example a bus controller).
 
-\section{Creating New Coherence Policies}
-
-We give designers planning to implement new coherence protocols several Scala traits
-containing abstract members.
-By filling in the missing functions, they can provide a complete coherence policy
-that will interoperate with our supplied cache controllers and TileLink networks.
-These functions are a superset of the previous APIs and are called from within the
-ClientMetadata and ManagerMetadata member methods.
-
-\begin{itemize}
-\item[HasCustomTileLinkMessageTypes] defines the custom, coherence-policy-defined message types, as opposed to the built-in ones. Policies must enumerate the custom messages to be sent over each channel, as well as which of them have associated data.
-\item[HasClientSideCoherencePolicy] contains all functions required for client coherence agents. Policies must enumerate the number of client states and define their permissions with respect to memory operations. Policies must fill in functions to control which messages are sent and how metadata is updated in response to coherence events.
-\item[HasManagerSideCoherencePolicy] contains all functions required for manager coherence agents. Policies must enumerate the number of manager states. Policies must fill in functions to control which Probe and Grant messages are sent and how  metadata should be updated in response to coherence events.
-\end{itemize}
-
-\section{Directory Representation}
+\subsection{Directory Representation}
 
 We also provide an API for accessing and maintaining directory information on the propagation of cache blocks across all the clients under the purview of a particular manager. These functions are intended to be called from within the CoherencePolicy’s functions, and abstract the details of the storage format used in the directory.
 
-\begin{itemize}
+\begin{description}
 \item[def pop(prev: UInt, id: UInt): UInt]
 Remove id from the prev set of sharers, returning a new set
 \item[def push(prev: UInt, id: UInt): UInt]
@@ -331,32 +395,135 @@ Total count of the sharers
 Provide the id of the sharer that should be contacted next
 \item[def full(s: UInt): UInt]
 Provide a full bitmap of all sharers, with 1 indicating a copy.
-\end{itemize}
+\end{description}
 
-\section{Hierarchical Translation}
+\subsection{Creating New Coherence Policies}
 
-Handled via opcodes.
+We give designers planning to implement new coherence protocols several Scala traits
+containing abstract members.
+These traits are combined to form the \code{CoherencePolicy} interface.
+By filling in the missing functions, they can provide a complete coherence policy
+that will interoperate with our supplied cache controllers and TileLink networks.
+These functions are a superset of the object-oriented APIs discussed in the previous sections,
+and are called from within the \code{ClientMetadata} and \code{ManagerMetadata} member methods.
+
+\begin{description}
+\item[HasCustomTileLinkMessageTypes] defines the custom, coherence-policy-defined message types, as opposed to the built-in ones. Policies must enumerate the custom messages to be sent over each channel, as well as which of them have associated data.
+\item[HasClientSideCoherencePolicy] contains all functions required for client coherence agents. Policies must enumerate the number of client states and define their permissions with respect to memory operations. Policies must fill in functions to control which messages are sent and how metadata is updated in response to coherence events.
+\item[HasManagerSideCoherencePolicy] contains all functions required for manager coherence agents. Policies must enumerate the number of manager states. Policies must fill in functions to control which Probe and Grant messages are sent and how  metadata should be updated in response to coherence events.
+\end{description}
+
+
+\section{Hierarchical Translation Between Protocols}
+
+TileLink supports hierarchical nesting of protocols via the Manager-Client Pairing (MCP) framework \cite{beu2011manager}.
+In terms of our Coherence 
 Hierarchical agent has both ClientMetadata and ManagerMetadata. 
 Check the opcode against the ClientMetadata to launch a transaction in the next level.
 (TileLink determines the ordering/interleaving of the outer transaction with the inner transaction;
 CoherencePolicy's job is to determine which outer transaction is needed.)
 
+We handle translation via a set of pre-defined memory opcodes (see Appendix~\ref{}.).
 
-\section{Software Control}
+\section{Concrete Protocols in RocketChip}
 
+We now present a family of five protocols that we have implemented using Chisel, TileLink, CoherencePolicy
+and our flow-based cache controllers in the Rocket Chip Generator \cite{rocket}.
+These protocols are based around a subset of the classic five state MOESI model
+first introduced by Sweazey and Smith \cite{sweazey1986class}.
+The protocols contain some subset of the following stable client metadata states~\cite{sorin2011primer}:
+\begin{description}
+\item[I]. The block is invalid. The cache either does not contain the block or it contains a potentially stale copy that it may not read or write.
+\item[M]. The block is valid, exclusive, owned, and potentially dirty. The block may be
+read or written. The cache has the only valid copy of the block, the cache must respond to
+requests for the block, and the copy of the block at the LLC/memory is potentially stale. 
+\item[S].The block is valid but not exclusive, not dirty, and not owned. The cache has a read-only copy of the block. Other caches may have valid, read-only copies of the block.
+\item[E].  The block is valid, exclusive, and clean. The cache has a read-only copy of the
+block. No other caches have a valid copy of the block, and the copy of the block in the
+LLC/memory is up-to-date. 
+\end{description}
+
+We have also implemented a more advanced \emph{migratory} protocol. 
+This protocol is a reactive protocol, based on proposals by~\cite{stenstrom-isca93,cox-isca93},
+that tracks the behavior of cache blocks over time,
+identifies migratory behaviors,
+and proactively revokes status on the written block in order to make it available to be consumed.
+Table~\ref{tab:protocols} lays out the relative capabilities of these five protocols.
+
+\begin{table}[t] 
+\begin{center}
+\begin{tabular}{|l|c|c|c|c|c|} 
+\hline
+Name & States & R+W       & RO        & Clean     & Migration \\ \hline
+MI        & 2 & \ding{52} &           &           & \\ \hline
+MEI       & 3 & \ding{52} &           & \ding{52} & \\ \hline
+MSI       & 3 & \ding{52} & \ding{52} &           & \\ \hline
+MESI      & 4 & \ding{52} & \ding{52} & \ding{52} & \\ \hline
+Migratory & 7 & \ding{52} & \ding{52} & \ding{52} & \ding{52} \\ \hline
+\end{tabular}
+\caption{Overview of protocols available in Rocket Chip.}
+\label{tab:protocols}
+\end{center}
+\end{table}
+
+Performance measurements, holding design parameters constant (other than core count?).
+Figure~\ref{} shows MI vs MEI for read-only data.
+Figure~\ref{} shows MI/MEI vs MSI/MESI for shared data.
+Figure~\ref{} shows MESI vs Migratory for migratory data.
+
+\section{Discussion}
+
+A coherence {\em protocol} specifies the exact sequences of messages that must be propagated through the memory hierarchy in order to effect a policy.
+A coherence {\em policy} governs how the SWMR invariant is represented as metadata indentifying available permissions on data blocks.
+TileLink
+
+A protocol consists of many flows, each of which use Policy (for permissions) and TileLink (for ordering).
+Common sub-flows can be codified as local transactions, mixed together to form controller logic 
+(dependencies among sub-flows can be inferred from flows).
+
+Figure~\ref{} highlights the interplay between message flows, coherence metadata objects, and TileLink.
+Policy determines which flow is occuring.
+Policy determines set of custom TileLink message types, pick what to send.
+Flow determines which policy methods to call.
+Flow determines when to send TileLink message.
+TileLink determines the possible shapes/ordering/priority of flows (to safe ones).
+TileLink determines what types of messages Policy can output.
+
+\section{Directions for Future Work}
+
+Design of custom protocols
 We want to allow hooks for software control of coherence states.
 Also handled via opcodes targetting individual cache blocks.
-Trigger voluntary releases
+Trigger voluntary releases.
+Integration with VLS.
 See appendix.
+Also want to enable software control of which protocol to use, via mode switch or for particular memory regions.
 
-Also want to enable software control of which protocol to use? Mode switch.
+Verification and synthesis from the same description, automatically.
+While our flow descriptions should also be compatible with CMP-based tools,
+actually automated such a toolchain is not within the scope of this thesis.
 
-\section{Performance of Different Protocols in Rocket Chip}
+Automatic generation of controllers via Bluespec-style rules.
+After breaking a set of global message flow transactions into sets of localized rules,
+it would be better to automatically infer the control dependencies between them.
+Our Chisel description is concise enough that is it easier to reason about than the standard approach,
+but still introduces opportunity for human error.
+Ideally, we would also automatically infer the contents of CoherencyPolicy functions from a set of decision points extracted from flow descriptions.
+For now, they must be filled in manually.
 
-\section{Discussion and Future Work}
-
-Verification
-
-Automatic generation of controllers via rules.
+Futher design space exploration.
+Multi-level hierarchies.
+Energy consumption of data movement.
+Storage vs energy tradeoffs: e.g. Directory representations.
 
 \section{Conclusion}
+
+Cache coherence protocol design is one of the toughest challenges in computer architecture.
+Through better abstractions, we have attempt to reduce the burden put on hardware devs
+to correctly interpret the implicit semantics of abstract coherence models in their implementations.
+We propose a top-down approach to protocol specification based on message flows, and provided a strategy
+for transforming such specifications into Chisel implementations of cache controllers.
+We also utilize object-oriented programming to encapsulate the policy-specific decisions encoded
+in the flows, making it easy to swap policies without changing any controller code.
+Opens the door to more flexible and customizable protocol design, which will be important
+to the future of energy-efficiency in the on-chip memory hierarchy.

@@ -4,6 +4,36 @@
 
 %% Created for hcook at 2012-07-23 01:58:53 -0700 
 
+@inproceedings{sweazey1986class,
+  title={A class of compatible cache consistency protocols and their support by the IEEE futurebus},
+  author={Sweazey, Paul and Smith, Alan Jay},
+  booktitle={ACM SIGARCH Computer Architecture News},
+  volume={14},
+  number={2},
+  pages={414--423},
+  year={1986},
+  organization={IEEE Computer Society Press}
+}
+
+@article{binkert-sigarch11,
+ author = {Binkert, Nathan and Beckmann, Bradford and Black, Gabriel and Reinhardt, Steven K. and Saidi, Ali and Basu, Arkaprava and Hestness, Joel and Hower, Derek R. and Krishna, Tushar and Sardashti, Somayeh and Sen, Rathijit and Sewell, Korey and Shoaib, Muhammad and Vaish, Nilay and Hill, Mark D. and Wood, David A.},
+ title = {The Gem5 Simulator},
+ journal = {SIGARCH Comput. Archit. News},
+ issue_date = {May 2011},
+ volume = {39},
+ number = {2},
+ month = aug,
+ year = {2011},
+ issn = {0163-5964},
+ pages = {1--7},
+ numpages = {7},
+ url = {http://doi.acm.org/10.1145/2024716.2024718},
+ doi = {10.1145/2024716.2024718},
+ acmid = {2024718},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+} 
+
 @article{merritt-riscv-eetimes2015,
   author = {Rick Merritt},
   title = "{Google, HP, Oracle Join RISC-V}",
@@ -70,6 +100,15 @@
   pages={13--25},
   year={1990},
   publisher={IEEE}
+}
+
+@inproceedings{oleary-fmcad09,
+  title={Protocol verification using flows: An industrial experience.},
+  author={O'Leary, John W and Talupur, Murali and Tuttle, Mark R},
+  booktitle={FMCAD},
+  pages={172--179},
+  year={2009},
+  organization={Citeseer}
 }
 
 @inproceedings{talupur2008going,
@@ -3973,12 +4012,15 @@ Principles of programming languages},
   publisher={Springer}
 }
 
-@software{rocket,
-	title = {Rocket Chip Generator},
-	url = {https://github.com/ucb-bar/rocket-chip},
-	howpublished={\url{https://github.com/ucb-bar/rocket-chip}},
-	author = {Beamer, Scott and others},
-	school = {UC Berkeley}
+@techreport{rocket,
+    Author = {Asanovi\'c, Krste and Avizienis, Rimas and Bachrach, Jonathan and Beamer, Scott and Biancolin, David and Celio, Christopher and Cook, Henry and Dabbelt, Daniel and Hauser, John and Izraelevitz, Adam and Karandikar, Sagar and Keller, Ben and Kim, Donggyu and Koenig, John and Lee, Yunsup and Love, Eric and Maas, Martin and Magyar, Albert and Mao, Howard and Moreto, Miquel and Ou, Albert and Patterson, David A. and Richards, Brian and Schmidt, Colin and Twigg, Stephen and Vo, Huy and Waterman, Andrew},
+    Title = {The Rocket Chip Generator},
+    Institution = {EECS Department, University of California, Berkeley},
+    Year = {2016},
+    Month = {Apr},
+    URL = {http://www.eecs.berkeley.edu/Pubs/TechRpts/2016/EECS-2016-17.html},
+    Number = {UCB/EECS-2016-17},
+    Abstract = {Rocket Chip is an open-source Sysem-on-Chip design generator that emits synthesizable RTL. It leverages the Chisel hardware construction language to compose a library of sophisticated generators for cores, caches, and interconnects into an integrated SoC. Rocket Chip generates general-purpose processor cores that use the open RISC-V ISA, and provides both an in-order core generator (Rocket) and an out-of-order core generator (BOOM). For SoC designers interested in utilizing heterogeneous specialization for added efficiency gains, Rocket Chip supports the integration of custom accelerators in the form of instruction set extensions, coprocessors, or fully independent novel cores. Rocket Chip has been taped out (manufactured) eleven times, and yielded functional silicon prototypes capable of booting Linux.}
 }
 
 @article{dennard1974design,
