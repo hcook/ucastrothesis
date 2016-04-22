@@ -21,8 +21,8 @@ This functionality might be data placement, in which case we can contrast option
 \section{Background}
 
 \begin{landscape}
-
-\begin{table}[htbp] 
+\begin{table}[p] 
+\begin{small}
 \begin{tabular}{|l|c|c|c||c|c|c|c||c|c||c|c|c||c|c||c|c|} 
 \hline Feature & 
                {\begin{sideways}Cray-2\end{sideways}} & 
@@ -35,7 +35,7 @@ This functionality might be data placement, in which case we can contrast option
                {\begin{sideways}Intel SSE\end{sideways}} & 
                
                {\begin{sideways}HPL-PD\end{sideways}} & 
-               {\begin{sideways}Itanium and Itanium 2\end{sideways}} & 
+               {\begin{sideways}Intel Itaniums\end{sideways}} & 
                
                {\begin{sideways}PA-RISC\end{sideways}} & 
                {\begin{sideways}SPARC\end{sideways}} & 
@@ -45,13 +45,13 @@ This functionality might be data placement, in which case we can contrast option
                {\begin{sideways}Intel XScale\end{sideways}} & 
                
                {\begin{sideways}Rigel\end{sideways}} & 
-               {\begin{sideways}\end{sideways}} 
+               {\begin{sideways}VLS\end{sideways}} 
                \\ \hline \hline
                
                          
  Deactivate entire cache (mode) & & & & & & & & & & & & &\ding{52}& & &\\ \hline
- Allocate capacity to SRAM usage (mode) & & & & \ding{52} & \ding{52} & & & & & & & &\ding{52}&\ding{52}& &\\ \hline
- Allocate line of capacity to SRAM usage (inst) & & & & & & & & & & & & & &\ding{52}& &\\ \hline \hline
+ Allocate capacity to scratchpad (mode) & & & & \ding{52} & \ding{52} & & & & & & & &\ding{52}&\ding{52}&\ding{52}&\\ \hline
+ Allocate line of capacity to scratchpad (inst) & & & & & & & & & & & & & &\ding{52}& &\\ \hline \hline
 
  Separate insts for sep mems &  \ding{52}  & & & \ding{52}& & & & & & & & & & & &\\ \hline
  
@@ -87,12 +87,11 @@ This functionality might be data placement, in which case we can contrast option
    Clean and evict cache line & & & & & & & & & & & & \ding{52}& & & &\\ \hline
    Clean and evict cache range & & & & & & & & & & & & &\ding{52}& & & \\ \hline
    Clean and evict entire cache & & & & & & & & & & & & &\ding{52}& & & \\ \hline
-   
  \end{tabular} 
+\end{small}
  \caption{Overview of features in past architectures}
  \end{table}
-
-\end{landscape}
+ \end{landscape}
 
 \subsection{Vector}
 \subsubsection{Cray-2}
