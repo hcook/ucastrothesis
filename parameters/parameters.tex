@@ -642,7 +642,7 @@ module Mult #(params)(...):
 \label{fig:site-phdl}
 \end{figure}
 
-We now describe the functionality of our novel context-dependent environments paradigm for parameterization,
+We now describe the functionality of our novel context-dependent environments paradigm for parameterization
 and assess its robustness using the case study introduced in the previous section.
 In the CDE paradigm, we again pass an associative array called an environment through a hardware module hierarchy, but the environment itself has an additional capability:
 the value returned for a query on a key can depend on other parameter values at that query's origin within the design.
@@ -726,7 +726,7 @@ This return value is propagated back to the original \code{env2('whoami')} calle
 Now that every value in the environment can actually be a function of the bindings in the environment that is evaluating it, we can trivially
 build meta-parameters that are based on formulae consisting of existing parameters, e.g. \code{\{"area"~->~site("length")~*~site("width")\}}.
 This feature is a powerful capability for forming chains of parameter dependencies, in which parameters can be derived from other parameters.
-Most importantly, these valuations can include reference to other parameters keys which were not known to the original generator authors,
+Most importantly, these valuations can include reference to other parameters' keys which were not known to the original generator authors,
 but which are instead being defined by other generators in the hierarchy.
 For example, while the original author of the \code{"area"} key may have specified only that it returns an integer,
 composition with a Circle generator would override it to be bound to \code{\{"area"~->~pi~*~site("radius")~*~site("radius")\}}, whereas
@@ -737,7 +737,7 @@ As long as any interstitial generator binds those keys before the generator that
 everything will dynamically resolve to the correct value.
 
 This \emph{site} functionality is particularly useful in the context of hardware generation because 
-it allows for specialization of parameter values based on contextual or ``geographic'' information that was injected into the enviroment by any intermediate generator in the module hierarchy.
+it allows for specialization of parameter values based on contextual or ``geographic'' information that was injected into the environment by any intermediate generator in the module hierarchy.
 This capability is at the heart of how we uniquify certain modules in a heterogeneous design.
 Exploiting this capability requires that modules in a generator library built around the CDE paradigm follow the practice of placing geographic information
 as new parameters in the environments they produce for their child modules, at the point where such geographic distinctions are clear. 
@@ -748,21 +748,21 @@ Assuming this geographic information will be dynamically inserted into the envir
 the top-level environment is free to tune each router's behavior according to \code{"location"}
 by referencing it in the site-based function \code{\{"route"~->~if(site("location")~==~(1, 2))~...~\}}.
 In a homogeneous system, \code{"route"} will be bound to a constant value.
-In a heterogeneous system, we will supply whatever function we please on \code{"location"},
+In a heterogeneous system, we will supply whatever function we please on \code{"location"}
 such that the individual locations will elaborate different designs.
 
 Figure~\ref{fig:site-phdl} provides a more detailed example of geographic specialization.
 We present an array of multipliers that use a parameterized coefficient, such as might be found in a DSP engine or FIR filter.
 The structure of the design is fixed: \code{DSP4MultArray} has four multipliers.
 However, we want to leave the binding of particular coefficients to particular multipliers up to the top level.
-If we want a homogenous set of multipliers, we can make the \code{'coefficient'} parameter a constant function.
+If we want a homogeneous set of multipliers, we can make the \code{'coefficient'} parameter a constant function.
 If we want a heterogeneous set of multipliers, we can make the \code{'coefficient'} parameter a function of \code{'index'}.
 The top-level parameter assignment may dispatch different values to the same query by using the geographic information known only at the origin of the query. 
 In this case, \code{Mult} need know nothing about \code{'index'}.
 Furthermore, we can use \code{'index'} in the top-level environment even though no generator has yet injected that key into the environment.
 When we finally query \code{'coefficient'} inside of \code{Mult}, \code{site} resolves to an environment where the \code{'index'} key has since been defined (in the heterogeneous case).
 This example demonstrates how components in a generator library built around CDEs can leave a hook (e.g. \code{index}) by which external modules can specialize them,
-and we can how this capability is based on decoupling ``how'' and ``when'' to compute a parameter's value. 
+and shows how this capability is based on decoupling ``how'' and ``when'' to compute a parameter's value. 
 
 While the context-dependent specialization provided by CDEs is a useful property for expressing heterogeneous hardware,
 CDEs also improve on regular environments in terms of the robustness they provide in the face of module hierarchy modifications.
@@ -801,7 +801,7 @@ Module types are shapes, the newly inserted or appended modules are red, and int
 
 Section \ref{sec:tax} and Section \ref{sec:cde} used the case study of a tile generator to qualitatively contrast the efficacy of all five parameterization paradigms
 at dealing with some specific modifications to the structure and hierarchy of hardware generators.
-In this section we instead attempt to analytically describe the robustness of each paradigm to \textit{any possible set} of design modifications.
+In this section, we instead attempt to analytically describe the robustness of each paradigm to \textit{any possible set} of design modifications.
 The results show that using CDEs \textit{always} results in a more robust design according to our metric,
 but they also provide insight into when other paradigms could be equally appropriate.
 
@@ -814,7 +814,7 @@ In contrast, an \emph{insertion} is when a new generator is incorporated between
 Insertions change the overall structure of the module hierarchy.
 See Figure~\ref{fig:both} for an illustration of this distinction.
 
-We assume all parameters added as part of a modification each require a unique value to be bound to their identifier the top-level of the module hierarchy.
+We assume all parameters added as part of a modification each require a unique value to be bound to their identifier at the top-level of the module hierarchy.
 In other words, multiple copies of the same generator must be capable of being assigned different parameter values.
 These unique bindings must then be brought into the scope of the place where the parameters are evaluated.
 Therefore, each original modification will trigger a varying number of scoping-related source code changes,
@@ -869,14 +869,14 @@ The arg-list paradigm requires $(\delta+\pi)*\theta$ NLCs, because each of $\the
 The flat-struct paradigm reduces this overhead to $\pi*\theta$ because the $\delta$ instantiations now refer to the struct instead of the individual parameters.
 The nested-struct paradigm requires only $1+\rho$ changes; a single change to the declaration of the parent module's companion struct, as well as $\rho$ changes based on how many
 references to parameters in $M$'s children there are in all of $M$'s parents.
-If were are appending $M$ rather than inserting it, $\rho$ will of course equal 0 because there cannot be an references to non-existent children.
-The dynamically-scoped solutions require no NLCs because the bindings created by the TLC are automatically put within the scope of $M$.
+If we are appending $M$ rather than inserting it, $\rho$ will of course equal 0 because there cannot be any references to nonexistent children.
+The dynamically-scoped solutions require no NLCs, because the bindings created by the TLC are automatically put within the scope of $M$.
 
 As for LCs, the lexically-scoped paradigms each only require a single LC, simply instantiating the module in question.
 In the case of the dynamic environments, more than one LC is needed to both instantiate the module and differentiate the parameter bindings if necessary.
 In particular, we use $\mu$ to indicate whether $M$ is instantiated anywhere else in the design hierarchy.
-If it is, we must now differentiate the top-level bindings that are to be used for each instance of $M$, and re-map those bindings onto the identifiers used
-within $M$ as we instantiate it.
+If it is, we must now differentiate the top-level bindings that are to be used for each instance of $M$
+and re-map those bindings onto the identifiers used within $M$ as we instantiate it.
 For regular environments, we introduce $\theta$ additonal LCs, because every new parameter needs to be renamed in order to disambiguate it from that of its peers.
 For context-dependent environments, only a single additional LC is required, assuming the existence of a single geographical parameter whose value can be overridden for the new module.
 
@@ -885,18 +885,20 @@ For example, from the perspective of the author of a generator that will serve a
 However, as that generator becomes embedded within deeper and deeper generator hierarchies, the burden born by all the parent generators grows and grows, as captured by the $\pi$ term.
 In fact, $\delta$ has an even larger potential to grow, since it is based on the number of different instantiations made anywhere in the source code,
 rather than the number of parent generator constructor declarations represented by $\pi$.
-The $\rho$ term governing nested-structs is highly design dependent, but is an important signifier of the work that has been done within a design to ensure composability
+The $\rho$ term governing nested-structs is highly design dependent, but it is an important signifier of the work that has been done within a design to ensure composability
 by making assertions about the behavior and configuration of child generators.
 In other words, more robust nested designs will have higher values of $\rho$.
-The $\mu$ term captures whether the module being added is resuing parameter identifiers that are being used elsewhere.
-It only matters for dynamically-scoped paradigms because they must provide their own namespaces for identifiers, independent of the module hierarchy's lexcical scope.
-In cases where we are heterogeneously adding an instance of a new module type, or homogenously adding an identical instantiation of an existing module type, no further work needs to be done.
+
+
+The $\mu$ term captures whether the module being added is reusing parameter identifiers that are being used elsewhere.
+It only matters for dynamically-scoped paradigms, because they must provide their own namespaces for identifiers, independent of the module hierarchy's lexcical scope.
+In cases where we are heterogeneously adding an instance of a new module type or homogeneously adding an identical instantiation of an existing module type, no further work needs to be done.
 Otherwise, each parameter must be uniquified as the module is instantiated.
 Overall, we are making an argument that the $\delta$, $\pi$, and $\rho$ terms are the ones most likely to grow,
 as well as the fact that NLCs are much more difficult to resolve than LCs because they could occur anywhere in the overall source codebase.
 
-Despite the poor scalability of argument lists, all designs with a shallow module hierarchy are manageable with them because the number of potential modifications is itself limited. 
-Designs with shallow but wide hierarchies that have expect no insertions and have few cross-module parameter references (e.g. networks) could be made robust the with nested-struct paradigm,
+Despite the poor scalability of argument lists, all designs with a shallow module hierarchy are manageable with them, because the number of potential modifications is itself limited. 
+Designs with shallow but wide hierarchies that have expect no insertions and have few cross-module parameter references (e.g. networks) could be made robust with the nested-struct paradigm,
 assuming the number of child parameters is not itself determined by a parameter.
 Deep hierarchical designs with minimal module reuse (e.g. processor pipelines) must support insertions as well as appends, but the diversity of the module types involved means there will be few parameter namespace collisions. These designs will remain robust with regular environment passing.
 Complicated designs with deep hierarchies, significant module reuse, and many cross-module references that must address all flavors of appends and insertions (such as our SoC generator) clearly benefit from CDEs.
@@ -968,11 +970,11 @@ A first-class function may be~\cite{swartz2014learning}:
 \end{itemize}
 Figure~\ref{fig:pf} shows some examples of partial functions defined as function literals.
 
-The applicability to maps is obvious, and in fact Scala provides built-in functionality for converting between map data structures and first class partial function types.
+The applicability to maps is obvious, and in fact, Scala provides built-in functionality for converting between map data structures and first class partial function types.
 Our CDEs are built on top of this capability by composing hierarchies of partial functions that map from an identifier
 to a parameter value (or Scala object created using multiple parameters).
-Our framework is permissive about what Scala objects can be used as an identifier, accepting \code{Any} Scala type.
-We can than use the pattern matching tools built in to Scala to match certain parameter names and extract additional information that may be stored in them.
+Our framework is permissive about what type of Scala objects can be used as an identifier, accepting \code{Any} Scala type.
+We can then use the pattern matching tools built in to Scala to match certain parameter names and extract additional information that may be stored in them.
 Figure~\ref{fig:paramspf} provides some examples of making use of different types of identifiers and alterations.
 
 \begin{figure}
@@ -999,7 +1001,7 @@ val s = p3(Location(0,1))
 
 We provide the \code{Field} wrapper class to improve the syntax for looking up a particular identifier, 
 allowing us to elide declaring the expected return type on each lookup of the identifier.
-By giving the identifier its own Scala class, we also can leverage the Scala type system to check that indentifiers from different projects to do not conflict.
+By giving the identifier its own Scala class, we also can leverage the Scala type system to check that identifiers from different projects to do not conflict.
 
 The values returned by our framework can also be of \code{Any} Scala type.
 The framework uses the type specified in the \code{Field} definition 
@@ -1012,7 +1014,7 @@ within a certain context, we can catch the \code{MatchError} thrown and then go 
 in the remaining ones.
 We exploit this functionality to create hierarchies of environments,
 where modifying a parent creates a child with new bindings that can override the parent's bindings,
-while in the absence of new bindings fall back on the parent's bindings.
+and which in the absence of new bindings will fall back on the parent's bindings.
 
 \subsection{site, here, and up}
 
@@ -1051,9 +1053,9 @@ We call parameters that use the \emph{site} functionality {\em context-dependent
 We call \emph{site} itself a \emph{view} of the environment.
 
 In addition to the view from \code{site}, we also provide users attempting to alter their environments with the views called \code{here} and \code{up}.
-\code{site} gives the user access to parameter valuations based on the value the have been modified to take at the call site.
+\code{site} gives the user access to parameter valuations based on the value they have been defined to have to the call site.
 \code{here} gives the user access to parameter valuations that are being defined within the very same alteration statement.
-\code{up} gives the user access to parameter valuations that were available in the previous, un-altered version of the environment.
+\code{up} gives the user access to parameter valuations that were available in the previous, unaltered version of the environment.
 Figure~\ref{fig:site} shows examples of how \code{site}, \code{here}, and \code{up} can be used to evaluate parameters based on their particular view of the environment.
 
 \subsection{Constraints}
@@ -1087,14 +1089,14 @@ class MyPairsNetwork extends Module {
 As the author of a hardware generator library, it is important to expose to external users (e.g., SoC architects)
 not only the free parameters of the design, but also any constraints that must be placed on
 the values bound to those parameters. 
-While preventing illegal parameters bindings from producing incorrect designs can be done with elaboration-time assertions
+While preventing illegal parameter bindings from producing incorrect designs can be done with elaboration-time assertions
 in the generator source code, we feel a better strategy is to give SoC authors enough information
 so as to avoid even attempting to generate bad designs in the first place.
 
 We provide a constraint expressions library that operates on \code{Fields}.
 Users can deploy this library to create simple expressions that describe relationships between parameters.
 Figure~\ref{fig:constraints} shows some examples of constraint expressions.
-Within any \code{Module} or \code{Bundle} component of our library, we can constrain the values of arbitrary fields using these expressions,
+Within any \code{Module} or \code{Bundle} component of our library, we can constrain the values of arbitrary fields using these expressions
 and register them using the \code{constrain} function.
 We support a set of expressions compatible with many constraint solving tools %($===, +, -, *, \%, <, >, <=, >=, \&\&, ||, ^$), 
 as well a range checking bound.
@@ -1143,7 +1145,7 @@ class With2TilesConfig extends DefaultConfig {
 We provide two further abstractions as part of our Scala CDE library, both focused on interactions with external tools.
 
 \code{Knobs} are hooks intended for use by design space explorers using CDEs to inject parameters into a design.
-They provide another level of name binding indirection available witin the top-level definitions (\code{TopDefs})
+They provide another level of name binding indirection available within the top-level definitions (\code{TopDefs})
 of a \code{Parameter} environment.
 They essentially serve as meta-parameters to which multiple other parameters' names can be bound, depending on the
 use case of the exploration process.
@@ -1154,8 +1156,8 @@ Knobs values are automatically flagged to be dumped to external files when a par
 top-level \code{Parameter} definitions, \code{Knob} value bindings, and top-level \code{Constraints}.
 We chose to express configurations via Scala source code rather than an external serialization format for economy of design.
 Given the name of a \code{ChiselConfig} sub-class, we can instantiate it using Scala's reflection capabilities and feed the \code{Parameters} thereby generated to Chisel.
-\code{ChiselConfigs} can extend one another through Scala's multiple inheiritance as well as be composed by name dynamically.
-Figure \ref{fig:configs} provides a simple example of \code{ChiselConfig} definition and inheiritance.
+\code{ChiselConfigs} can extend one another through Scala's multiple inheritance as well as be composed by name dynamically.
+Figure \ref{fig:configs} provides a simple example of \code{ChiselConfig} definition and inheritance.
 
 
 
@@ -1166,8 +1168,8 @@ The goal of this section is to distill some of the learned wisdom about effectiv
 for deploying CDEs in a Chisel-based hardware generator.
 Beyond which parameterization paradigm to use,
 there are additionally a wide variety of design decisions that aid the process of injecting parameters into a design.
-In particular, Scala provides several built-in features that we exploit, which are not innately coupled to our choice to use
-CDEs for paramterization, but do complement it.
+In particular, Scala provides several built-in features that we exploit, which are not innately coupled to our choice of using
+CDEs for paramterization but do complement it.
 The following subsections attempt to capture some of the tradeoffs we have explored while taping out chips using our SoC generator.
 
 \subsection{Scala's Implicit Parameter Lists}
@@ -1190,7 +1192,7 @@ val b = Module(new B(Parameters.empty.alter(Map("width" -> 16}))))
 \label{fig:implicit}
 \end{figure}
 
-Implicit parameters are form of lexical scoping that offer some of the perks of dynamic scoping in a limited (but safe) context.
+Implicit parameters are a form of lexical scoping that offer some of the perks of dynamic scoping in a limited (but safe) context.
 They are another built-in feature of the Scala language.
 When a method or constructor declares one of its parameters as \code{implicit}, 
 users of that method can decide whether or not to supply a value for that parameter.
@@ -1203,7 +1205,7 @@ a single value of a matching type being marked with the \code{implicit} keyword 
 Implicit parameters simplify Scala APIs by eliding parameters with which standard users do not need to concern themselves.
 In our case, we have found them to be particularly useful for passing our \code{Parameters} objects through a hierarchy of Modules and Bundles.
 In cases where none of the Parameter fields are being altered (which is the common case),
-users do not have to explicitly pass the \code{Parameter} instance into the Module of Bundle's constructor.
+users do not have to explicitly pass the \code{Parameter} instance into the Module or Bundle's constructor.
 Figure~\ref{fig:implicit} shows examples of how implicit parameters are expressed in Scala and how we use them to make \code{Parameters}
 available throughout a hardware Module hierarchy.
   
@@ -1247,14 +1249,14 @@ class MyCache(implicit val p: Paramaeters) extends Module
 
 Scala supports multiple inheritance, wherein member definitions of multiple classes can be reused in the definition of a new class.
 This multiplicity is accomplished without inheritance ambiguity by way of {\em mixins},
-which are classes that contains methods for use by other classes without having to be the parent class of those other classes.
+which are classes that contain methods for use by other classes without having to be the parent class of those other classes.
 Specfically, Scala allows users to define mixin {\em traits}
 that represent a distinct feature or aspect orthogonal to the responsibility of a concrete type.
 A trait cannot itself be instantiated, instead the trait's functionality is mixed-in when defining or using a class.
 Since traits are innately abstract, they can contain abstract methods and members that are to be filled in by the concrete class.
 
 We have found it productive to use traits to encapsulate the process of extracting parameter values from CDEs and binding them to local variable names.
-Parameter lookups need only occur once per class instantiation, instead of every time a particular parameter is used.
+Parameter lookups need only occur once per class instantiation instead of every time a particular parameter is used.
 Code reuse is improved across many classes that make use of the same parameters, such as all the Bundles in
 a multi-channel protocol specification.
 Figure~\ref{fig:mixin} shows examples of how we mix-in traits containing parameter bindings to Module and Bundle sub-classes.
@@ -1322,9 +1324,9 @@ In the second example, we use a \code{case class} that wholly encapsulates the p
 
 Another parameterization design decision that is orthogonal to the choice of paradigm is
 the granularity with which individual parameters are exposed to the rest of the design.
-Figure~\ref{fig:fields} shows two alternative approaches generator authors can take to exposing
+Figure~\ref{fig:fields} shows two alternative approaches that generator authors can take to expose
 the parameters used by their generator to external clients.
-Each have pros and cons, and designers using our tools have employed each in different instances.
+Each approach has pros and cons, and designers using our tools have employed each in different instances.
 
 In the first approach, every independent parameter is represented by an individual \code{Field} definition.
 Dependent parameters are then defined in traits after the parameters have been bound to local variables.
@@ -1397,7 +1399,7 @@ Parameters that vary together are keyed off of the same geographic parameter.
 It is important to note that the original generator library does not need to know anything about
 this geographical parameter:
 it can be introduced by external users and injected into the design at the top-level or anywhere in between.
-\code{site} is what allows us to decouple the definition of the parameters bindings from the run-time evaluation of their values,
+\code{site} is what allows us to decouple the definition of the parameters' bindings from the run-time evaluation of their values,
 which vary based on ``where'' they are queried.
 
 \subsection{The FindBy Pattern}
@@ -1479,19 +1481,19 @@ Furthermore, the space of possible implementations for a HLS description can be 
 so expressing those tradeoffs in a way that is compatible with design space exploration is important.
 
 While I will not discuss it further as part of this thesis, we have prototyped some initial implementations
-of hooking up our \code{Parameters} and \code{Constraint} abstractions to a design space exploration tool, called Jackhammer.
+of hooking up our \code{Parameters} and \code{Constraint} abstractions to a design space exploration tool called Jackhammer.
 Given a set of free top-level parameters and a set of constraints placed upon them, Jackhammer can create a design of experiments and
 execute that design against a cloud-based service for design point evaluation.
-Further work is required to automate the exploration process, and close the loop between feedback from one iteration of examining a
+Further work is required to automate the exploration process and close the loop between feedback from one iteration of examining a
 set of design instances and selecting points for further exploration.
 
 The biggest downside to relying on a dynamically-scoped solution for parameterization is that there
-are a class of errors that would be compile-time errors in a lexically-scoped system that are
+is a class of errors that would be compile-time errors in a lexically-scoped system that are
 run-time errors in a dynamically-scoped one.
 These errors include things such as:
 parameters never being bound to a value, function, or \code{Knob};
 parameters being bound to return a type that does not match that expected by their query site;
-or infinite recursion of the the CDE implementation due to loops in the \code{site} call graph.
+or infinite recursion of the CDE implementation due to loops in the \code{site} call graph.
 While we have attempted to provide sensible error messages for some of these cases,
 it is difficult to wholly absolve ourselves of introducing the possibility of run-time failures.
 In the future, it might be possible to use Scala's support for macros to do a better job of eliding the need for runtime type casts
@@ -1504,7 +1506,7 @@ such as those seen in our RocketChip generator, is worth the cost.
 
 We have presented a taxonomy of existing parameterization paradigms in HDLs and demonstrated that our 
 context-dependent environments paradigm is provably more robust in the face of modification to any given design's module hierarchy. 
-We have also provided case studies of how CDEs are particularly appropriate for hardware generators,
+We have also provided case studies of how CDEs are particularly appropriate for hardware generators
 and offered insights into how best to deploy them within a new HDL embedded in Scala.
-In the following chapters, we will move on to the specifics of how to express cache coherence protocols with hardware generators,
+In the following chapters, we will move on to the specifics of how to express cache coherence protocols with hardware generators
 and build on the CDE framework to effectively parameterize both the protocols themselves and the hardware modules that implement them.
