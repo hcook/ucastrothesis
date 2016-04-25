@@ -4,12 +4,14 @@
 In a multicore chip with a sizeable hierarchy of on-chip caches,
 the majority of the data movement activity that occurs within the chip
 is done automatically, in accordance with a cache coherence protocol.
-The cache coherence protocol is implemented by the system of cache and memory controllers distributed across the chip.
-Since traditional cache coherence protocols preserve the abstraction of a global memory shared by all the cores,
+The cache coherence protocol is a distributed protocol implemented by a system of cache controllers and memory controllers
+spread across the chip that communicate through on-chip networks.
+As traditional cache coherence protocols preserve the software abstraction of a global memory shared by all the cores,
 the controllers must work behind-the-scenes to keep copies of data in the right places,
 while managing tradeoffs between communication volume, storage capacity and performance.
-We predict going forward that, due to the increased percentage of energy consumpution taken up by the memory hierarchy,
-that customizable, heterogenous cache coherence policies that minimize data movement for particular use cases
+Going forward, due to the increased percentage of energy consumpution taken up by the memory hierarchy,
+we predict the rise of customizable, heterogeneous cache coherence policies.
+Specifically, protocols that minimize data movement for particular use cases
 will become an increasingly desirable feature of an on-chip memory hierarchy.
 How to define customizable coherence policies, implement the associated protocols efficiently,
 and manage the aforementioned communication/performance tradeoff is an important design challenge for future energy-efficient architectures. 
@@ -40,13 +42,13 @@ The first is a high-level language,
 called \emph{message flows},
 taken from the verification literature, 
 that describes all the global transactions that make up a particular coherence protocol.
-A collection of flows describe every sequence of actions that a protocol can take,
+A collection of flows describes every sequence of actions that a protocol can take,
 where actions consist of sending TileLink messages and accessing  data and metadata in local memories.
 The second abstraction is \emph{coherence metadata objects}.
 These objects encapusulate the states that distinguish protocol message flows from one another,
 and provide methods for generating TileLink messages and making policy-based decisions within flow transactions.
 The abstraction provided by the metadata objects separates the concerns of the controller design from the concerns of the policy design, 
-while the TileLink substrate ensures forward progress of global protocol transactions.
+while the underlying TileLink substrate ensures forward progress of global protocol transactions.
 
 \section{Background} 
 
@@ -62,7 +64,8 @@ Unfortuntately, the semantic gap between high-level abstract descriptions of pro
 concrete HDL implementations of those same protocols is so wide that verifying the correctness of the protocol
 does not come close to guaranteeing the correctness of the final implementation \cite{dave-memocode05}.
 
-I am not the first to propose using a higher level of abstraction to describe cache coherence protocol behavior.
+I am not the first to propose using a higher level of abstraction to describe cache coherence protocol behavior
+in such a way that cache controller implementations can be synthetized from the same description that has been verified.
 The following approaches each offer a Domain Specific Language (DSL)
 built around an abstraction of state machines that perform certain actions when certain conditions are met.
 This conditional execution model is a good fit for the requirements of a coherent cache controller,
@@ -71,7 +74,7 @@ Each high-level description is used to drive the creation of implementations (sy
 as well as correctness (verification rules or documentation) from the same source.
 
 Teapot \cite{chandra-dsl97, chandra-sigplan96}
-is a Pascal-based DSL for describing coherence protocols using ``continuations'' as an abstraction.
+is a Pascal-like DSL for describing coherence protocols using ``continuations'' as an abstraction.
 A Teapot program consists of a set of states; each state
 specifies a set of message types and the actions to be
 taken on receipt of each message, should it arrive for a
@@ -112,8 +115,8 @@ In the next section, we discuss how a global, flow-based description of a protoc
 of local controller transactions, and discus how we implement those local transactions in Chisel,
 our meta-HDL/DSL embedded in Scala.
 
-So far we have discussed prior art in how to describe and implement protocols,
-and we now progress from how to build protocols to what protocols to implement. 
+So far we have discussed prior art in how to implement protocols,
+but we should also review what protocols to consider implementing.
 Heterogeneity in memory access behavior as been a major focus of study for distributed shared memory systems.
 Memory access patterns can general be grouped at a high level into a few common sharing patterns, such as read-modify-write, producer-consumer, and migratory. Systems that support adaptive cache coherence protocols allow the behavior of the protocol to change with detected changes in program behavior.  Examples of such adaptive protocols in the distributed memory space include \cite{amza-hpca97,lebeck-archnews95,stenstrom-isca93,cox-isca93}. Note that these designs have a single protocol, but one that varies its behavior dynamically.
 
@@ -125,67 +128,146 @@ which served as an inspiration for the TileLink/CoherencePolicy separation of in
 
 Talupur and Tuttle showed that message flows are a succinct and
 readily available source of high-level invariants that usually go
-unused in protocol verification. 
-Flows
-are often illustrated by protocol designers in the form of
-message sequence charts.
-
+unused in protocol verification \cite{talupur2008going}.
+Flows are often illustrated by protocol designers in the form of message sequence charts.
 Protocol designers use message flows to describe
-the basic organization of a protocol and to reason about the
-protocol itself.
+the basic organization of a protocol and to reason about its requirements.
 Message flows implicitly impose constraints
 on the order in which the actions appearing within them can happen:
-Each action can happen only after the preceding action has been executed
-
-Message flows — similar to message sequence charts — are a natural,
-local, linear way for us to think about system behavior in place
-of global, monolithic, system-wide invariants
-
+an action can execute only after any actions it depends upon been executed.
 The simplest flows are linear ordering of events usually involving two agents
 Each entry in the flow is either a simple event, 
-corresponding to a single protocol update being committed or a sub-flow recursively composed of simple events.
+corresponding to a single protocol update being committed,
+or a sub-flow recursively composed of simple events.
+Figure~\ref{} shows a simple flow based around a voluntary writeback of dirty data from a client cache,
+using a TileLink transaction.
+
 The notion of sub-flow allows us to
 chop up a complicated flow into smaller units such that each
 unit shows interaction between two or more agents engaged in a tightly-coupled causal interaction.
-an event might have multiple preceding actions
-Similarly, an event in the flow might have more than one succeeding event
+An event might have multiple preceding actions,
+or might have more than one succeeding event
 Flows may only express a partial order of events and not a total order.
-For all of the above reasons, best to represent them as a Directed Acyclic Graph.
+For all of the above reasons, O'Leary et al. proposed that it is best to represent flows as Directed Acyclic Graphs (DAGs)
+\cite{oleary-fmcad09}.
+Figure~\ref{} shows a more complicated flow based around acquiring write permissions on a block that is currently being
+shared by multiple clients, again using a TileLink transaction.
 
-Non-interference between flows: which flows are allowed to execute in the system at the same time.
-Can be expressed as rules.
-In general for our family of coherence protocols, these rules are reflected in the TileLink substrate specified in the previous chapter.
-Correct implementations of TileLink by definition enforce the non-interference rules needed by our flows.
+An important part of verifying protocols using flows is to specify rules that govern non-interference between flows,
+i.e., which flows are allowed to execute in the system at the same time.
+For our family of coherence protocols, these rules are reflected in the specification of the TileLink substrate
+described in the previous chapter.
+Correct implementations of TileLink will by definition enforce the non-interference rules required by our flows.
+While we cannot infer the flow non-interference rules automatically from the TileLink specification,
+this congruence is still significant in that it means proofs of a correct TileLink implementation
+are sufficient to guarantee correct flow non-interference.
 
-\subsection{From Flows to Local Transactions}
+\subsection{From Global Flows to Local Transactions}
 
-Recognizing that a global flow can be divided into sub-flows is useful for providing non-interference lemmas to CMP-based formal verification tools \cite{}.
-However, it also provides a mechanism for us to decompose and re-aggregate the contents of sub-flows based on their geographical location.
-In other words, each flow touch several distinct agents, and we can collect all those found within an individual agent type in our cache coherence shared memory system.
-Then, if we can generate controllers that are capable of performing each sub-flow atomically, as well as send messages to other agents,
-we will have furnished ourselves with a substrate that is correct by construction.
+Recognizing that a global flow can be divided into sub-flows is useful for providing non-interference lemmas to CMP-based formal verification tools \cite{oleary-fmcad09}.
+However, this process also provides a mechanism for us to decompose and re-aggregate the contents of sub-flows based on their geographical location.
+In other words, if each flow touches several distinct agents, 
+we can collect all those sub-flows applied within an individual type of agent.
+Then, if we can generate agent controllers that are capable of performing each sub-flow atomically,
+as well as send messages to other agents and wait for responses,
+we will have furnished ourselves with a controller that is correctly implements the sub-flows of all
+possible global flows.
+This top-down approach to controller design is central to the productivity of our approach.
 
 In this section we present an algorithm for turning a collection of flows into multiple collections of localized sub-flows.
-First, we express the flows as DAGs in Scala, where vertices are events and edges are happens-before dependencies.
+First, we express the flows as DAGs in Scala, where vertices are events or actions and edges are happens-before dependencies between them.
 Next, we walk each DAG looking for components that are separable sub-graphs of events that all occur at the same agent.
 We can sever the graph around these points, leaving us with input vertices that represent receiving a message of a particular type.
 These input nodes are the events that kick off local sub-transactions.
-Conversely, these mini-DAGs may also contain nodes that require sending a message to anothe agent or agents.
+Conversely, these mini-DAGs may also contain nodes that require sending a message to another agent or agents.
+Figure~\ref{} illustrates an example decomposition using the three flows from the previous section.
+Figure~\ref{} presents the algorithm for flow decomposition.
 
-Once we have partitioned all the DAGs, it is trivial to collect the set of sub-flows from each flow that correspond with a particular agent type.
-This per-type set then forms the basis of the operations that we will expect this agent to be able to perform atomically.
+\begin{figure}
+\centering
+\begin{scala}
+abstract class FlowNode {
+  val id: String = "Node" + FlowNode.curId.getAndIncrement()
+  def findSubgraphs: (Seq[MessageNode], FlowNode) = {
+    this match {
+      case mn: MessageNode => {
+        val (subgraphs, currentGraph) = mn.child.findSubgraphs
+        (subgraphs :+ mn.copy(child=currentGraph), DoNode("Send message to " + mn.dst))
+      }
+      case cn: ControlNode => {
+        val recurse = cn.children.map(_.findSubgraphs)
+        (recurse.map(_._1).reduceLeft(_ ++ _), cn.copy(children=recurse.map(_._2)))
+      }
+      case dn: DoNode => {
+        (Nil, dn)
+      }
+    }
+  }
+  def subgraphs: Seq[MessageNode] = findSubgraphs._1
+}
+
+case class ControlNode(
+  children: Seq[FlowNode],
+  parallel: Boolean,
+  condition: Option[String] = None) extends InnerNode
+
+case class MessageNode(child: FlowNode, src: Location, dst: Location) extends InnerNode
+
+case class DoNode(doFunc: String) extends FlowNode
+
+class Flow(val name: String, val head: FlowNode) {
+  var conflicts = new ArrayBuffer[Flow]
+  def addConflicts(s: Seq[Flow]) {
+    s +: conflicts
+  }
+  def subgraphs = head.subgraphs
+}
+
+case class Location (name: String)
+
+abstract class Protocol {
+  val name: String
+  var flows: Seq[Flow]
+  val dir = Location("dir")
+  val mem = Location("mem")
+  val cache = Location("cache")
+}
+
+def getSubFlows(prot: Protocol, loc: Location): Seq[Flow] = {
+  val flows = prot.flows
+  val list = flows.map(_.subgraphs)
+  val distinct = list.map(_.distinct)
+  return distinct.filter(_.head.dst == loc)
+}
+
+\end{scala} 
+\caption{
+An algorithm for decomposing a set of global flows into local sub-flows.
+}
+\label{fig:tlgeo}
+\end{figure}
+
+Once we have partitioned all the global flow DAGs into smaller DAGs representing local sub-flows,
+it is trivial to collect the set of sub-flows that correspond with a particular agent type.
+This per-type set of sub-flows then forms the basis of the operations that we will expect this agent to be able to perform atomically.
 In the next section we discuss how to turn any of these collections of localized sub-flows into a cache or directory controller.
 
-\subsection{Expressing Localized Sub-Flows and Their Dependencies}
+\subsection{Implementing Local Sub-Flows and Their Dependencies}
 
 Taking a collection of sub-flows that must be implemented by the particular agent we are designing,
-our task is now to 
-We do this by creating Transaction Status Handling Registers (TSHRs).
-One type of TSHR for each sub-flow, with some capable of merging multiple sub-flows.
+our task is now to implement the control logic that allows those sub-flows to operate atomically.
+Ideally, we would be able to perform this transformation automatically, 
+but for now some hand-coding is still required in our Rocket Chip Genereator.
+However, we are able to use Scala to create very concise descriptions of sub-flow behaviors,
+which are easily composed together to create complete cache controllers.
+
+Part of our strategy is to create Transaction Status Handling Registers (TSHRs).
+These modules contain all the state needed to track the progress of 
+one type of sub-flow, with some capable of merging multiple sub-flows.
 In order to make a
 provide a way to execute the actions themselves, as well as to implement the dependencies between actions for each flow.
 
-Ideally, we would factor our HDL code such that code describing the common actions and their dependencies are encapsulated,
+We want to factor our HDL code such that code describing the common actions and their dependencies are encapsulated,
 but made avaulable to each TSHR that needs it.
 Scala's traits are perfect for this factoring, as we will show in the following examples.
 Each trait consists of functions that actually update state or send a message (i.e., execute a sub-flow).
