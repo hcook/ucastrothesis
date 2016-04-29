@@ -119,6 +119,7 @@ So far we have discussed prior art in how to implement protocols,
 but we should also review what protocols to consider implementing.
 Heterogeneity in memory access behavior as been a major focus of study for distributed shared memory systems.
 Memory access patterns can general be grouped at a high level into a few common sharing patterns, such as read-modify-write, producer-consumer, and migratory. Systems that support adaptive cache coherence protocols allow the behavior of the protocol to change with detected changes in program behavior.  Examples of such adaptive protocols in the distributed memory space include \cite{amza-hpca97,lebeck-archnews95,stenstrom-isca93,cox-isca93}. Note that these designs have a single protocol, but one that varies its behavior dynamically.
+In particular, we used~\cite{stenstrom-isca93,cox-isca93} as inspiration for the migratory policy provided in our Rocket Chip Generator~\cite{rocket}.
 
 In the shared memory space, designs like FLASH \cite{kuskin-archnews94} have incorporated multiple protocols on top of a single hardware substrate in order to provide adaptability. Generally transitions between protocols have been triggered by heuristic mechanisms \cite{mukherjee-archnews98}. Others \cite{chandra-sigplan96,falsafi-sc94} have proposed creating application-specific protocols that are tailored to match a particular application's needs.
 These efforts indicate that multiple protocols can share the same underlying communication framework and memory system,
@@ -127,20 +128,28 @@ which served as an inspiration for the TileLink/CoherencePolicy separation of in
 \section{Protocol Message Flows}
 
 Talupur and Tuttle showed that message flows are a succinct and
-readily available source of high-level invariants that usually go
-unused in protocol verification \cite{talupur2008going}.
-Flows are often illustrated by protocol designers in the form of message sequence charts.
+readily available source of high-level invariants that have historically gone
+unused in the formal verification of cache coherence protocols \cite{talupur2008going}.
+Flows are often illustrated by protocol designers in the form of message sequence charts,
+which are frequently found in design documents.
 Protocol designers use message flows to describe
 the basic organization of a protocol and to reason about its requirements.
-Message flows implicitly impose constraints
-on the order in which the actions appearing within them can happen:
+Message flows impose constraints on the order in which the actions appearing within them can happen:
 an action can execute only after any actions it depends upon been executed.
-The simplest flows are linear ordering of events usually involving two agents
+
+It is worth noting that the TileLink transactions we illustrated in the previous chapter using message sequence charts
+are a form of message flows.
+All that they lack is information about what coherence protocol related events take place in between the sending
+and receiving of TileLink messages.
+Thus, TileLink is a framework that describes the shapes of a set of possible flows,
+and these outlines can be filled in to create more concrete specifications of protocol behavior.
+
+The simplest flows are linear ordering of events, usually involving two agents.
 Each entry in the flow is either a simple event, 
 corresponding to a single protocol update being committed,
 or a sub-flow recursively composed of simple events.
 Figure~\ref{} shows a simple flow based around a voluntary writeback of dirty data from a client cache,
-using a TileLink transaction.
+using a TileLink Release/Grant transaction.
 
 The notion of sub-flow allows us to
 chop up a complicated flow into smaller units such that each
@@ -151,7 +160,7 @@ Flows may only express a partial order of events and not a total order.
 For all of the above reasons, O'Leary et al. proposed that it is best to represent flows as Directed Acyclic Graphs (DAGs)
 \cite{oleary-fmcad09}.
 Figure~\ref{} shows a more complicated flow based around acquiring write permissions on a block that is currently being
-shared by multiple clients, again using a TileLink transaction.
+shared by multiple clients, again using a 5-step TileLink transaction.
 
 An important part of verifying protocols using flows is to specify rules that govern non-interference between flows,
 i.e., which flows are allowed to execute in the system at the same time.
@@ -181,13 +190,12 @@ We can sever the graph around these points, leaving us with input vertices that 
 These input nodes are the events that kick off local sub-transactions.
 Conversely, these mini-DAGs may also contain nodes that require sending a message to another agent or agents.
 Figure~\ref{} illustrates an example decomposition using the three flows from the previous section.
-Figure~\ref{} presents the algorithm for flow decomposition.
+Figure~\ref{fig:decomp} presents the algorithm for flow decomposition.
 
 \begin{figure}
 \centering
 \begin{scala}
 abstract class FlowNode {
-  val id: String = "Node" + FlowNode.curId.getAndIncrement()
   def findSubgraphs: (Seq[MessageNode], FlowNode) = {
     this match {
       case mn: MessageNode => {
@@ -198,9 +206,7 @@ abstract class FlowNode {
         val recurse = cn.children.map(_.findSubgraphs)
         (recurse.map(_._1).reduceLeft(_ ++ _), cn.copy(children=recurse.map(_._2)))
       }
-      case dn: DoNode => {
-        (Nil, dn)
-      }
+      case dn: DoNode => (Nil, dn)
     }
   }
   def subgraphs: Seq[MessageNode] = findSubgraphs._1
@@ -216,21 +222,13 @@ case class MessageNode(child: FlowNode, src: Location, dst: Location) extends In
 case class DoNode(doFunc: String) extends FlowNode
 
 class Flow(val name: String, val head: FlowNode) {
-  var conflicts = new ArrayBuffer[Flow]
-  def addConflicts(s: Seq[Flow]) {
-    s +: conflicts
-  }
   def subgraphs = head.subgraphs
 }
 
 case class Location (name: String)
 
 abstract class Protocol {
-  val name: String
   var flows: Seq[Flow]
-  val dir = Location("dir")
-  val mem = Location("mem")
-  val cache = Location("cache")
 }
 
 def getSubFlows(prot: Protocol, loc: Location): Seq[Flow] = {
@@ -244,7 +242,7 @@ def getSubFlows(prot: Protocol, loc: Location): Seq[Flow] = {
 \caption{
 An algorithm for decomposing a set of global flows into local sub-flows.
 }
-\label{fig:tlgeo}
+\label{fig:decomp}
 \end{figure}
 
 Once we have partitioned all the global flow DAGs into smaller DAGs representing local sub-flows,
@@ -257,78 +255,145 @@ In the next section we discuss how to turn any of these collections of localized
 Taking a collection of sub-flows that must be implemented by the particular agent we are designing,
 our task is now to implement the control logic that allows those sub-flows to operate atomically.
 Ideally, we would be able to perform this transformation automatically, 
-but for now some hand-coding is still required in our Rocket Chip Genereator.
+but for now some hand-coding is still required in our Rocket Chip Genereatorr~\cite{rocket}.
 However, we are able to use Scala to create very concise descriptions of sub-flow behaviors,
 which are easily composed together to create complete cache controllers.
 
 Part of our strategy is to create Transaction Status Handling Registers (TSHRs).
 These modules contain all the state needed to track the progress of 
-one type of sub-flow, with some capable of merging multiple sub-flows.
-In order to make a
-provide a way to execute the actions themselves, as well as to implement the dependencies between actions for each flow.
+one type of sub-flow, with some handlers capable of merging multiple sub-flows.
+We provide a way to execute the actions themselves, as well as to implement the dependencies between actions for each flow.
+Actions include reading and writing the metadata and data arrays,
+performing atomic memory operations (AMOs),
+as well as sending TileLink messages and waiting for matching responses.
 
-We want to factor our HDL code such that code describing the common actions and their dependencies are encapsulated,
-but made avaulable to each TSHR that needs it.
-Scala's traits are perfect for this factoring, as we will show in the following examples.
-Each trait consists of functions that actually update state or send a message (i.e., execute a sub-flow).
+We want to factor our HDL code such that code describing common sub-flow actions and their relative ordering dependencies
+are well encapsulated, but still made available to each TSHR that uses them as part of its particular sub-flows.
+Scala's traits and mix-in multiple inheiritance are a ideal match for this source code factoring task,
+as we will show in the following examples.
+Each trait consists of functions that actually update state or send a message,
+and bits that are added to a ``scoreboard''~\ref{thornton1964scoreboard} that tracks the progress of concurrent sub-flows.
+As execution of the sub-flow progresses, additional actions are performed once their dependencies are satisfied.
 
-Update functions related to each port or data structure are provided in specific traits, for example...
-Scoreboard of ``pending'' bits track the flow of data and the progress of the transaction.
-Dependencies from sub-flow to the next are expressed inside of the trackers themselves,
-by referencing the pending bits and connecting each action to the next.
+Dependencies among sub-flows from different traits are expressed inside of the trackers themselves,
+by referencing the pending bits and providing an additional layer of inter-flow dependencies.
 Trackers also contain code to implement the global rules restricting what flows are allowed to execute at the same time.
+This is the portion of the system that we could,
+but do not yet, derive automatically from the global flows.
+However, we have found that expressing the dependencies via sub-flow pending bits is conscise and much easier to reason about than
+constructing interacting state machines to handle each sub-flow. 
 
-Examples of tracker code.
+We now show examples of some examples of traits containing methods that generate logic implementing sub-flow actions.
+Figure~\ref{} shows the \code{AcceptsVoluntaryReleases} trait, which accepts voluntary writebacks from clients,
+writes the data to some kind of backing storage (which may be local or require further messaging),
+and then acknowledges the writeback with a Grant message to the original client.
+Note that this trait provides an output hook for ensuring that the intial Release is completed
+and an input hook for ensuring that the writeback has been committed to some kind of backing memory.
+Figure~\ref{} shows the \code{EmitsInnerProbes} trait, which send Probes to clients in order to prompt them to Release permissions on a cache block.
+The tracker must wait until an appropriate number of Release acknowledgements or writebacks have been collected before advancing
+to the next stage, and this trait provides an output hook to do so.
+The two traits are composable, in that a particular tracker generator can mix-in both so as to handle Release associated with
+both voluntary writebacks and probe responses.
 
+Trackers are composed of these traits, and additionally consist of logic to manage dependencies among the sub-flows.
+They do this by referencing names bits in the scoreboard logic.
+Figure~\ref{} outlines \code{CacheVoluntaryReleaseTracker}, a tracker that combines the
+\code{WritesToOuterCacheDataArray}, \code{AcceptsVoluntaryReleases}, and \code{HasDataBuffer} traits.
+This tracker guarantees forward progress in a hierarchical cache by always being available to sink voluntary writebacks.
+Figure~\ref{} summarizes \code{BroadcastAcquireTracker}, a tracker that combines the
+\code{BroadcastsToAllClients}, \code{AcceptsVoluntaryReleases}, 
+\code{EmitsVoluntaryReleases}, \code{AcceptsInnerAcquires}, \code{EmitsInnerProbes}, \code{EmitsOuterAcquires},
+and \code{HasDataBuffer} traits.
+This tracker is used in conjuction with in a broadcast-based messaging medium to handle Acquire transactions,
+and is an example of combining two traits that use the same messaging channel.
+
+These traits and trackers, which are derived from commom sub-flows and from global flows respectively,
+demonstrate how we are able to transform high-level descriptions of protocol behavior into HDL descriptions
+that produce syntehsizeable hardware.
+The scoreboard logic they produce and compose manages concurrency and atomicity within the agent.
+However, we have not yet discussed how policy-specific decisions are expressed within the flows,
+and how we can absract such decisions such that the same tracker designs can be used for multiple protocols.
+This policy-centric abstraction is the focus of the next section.
 
 \section{Object-Oriented Coherence Policies}
 
-the object-oriented interface
-we have defined and made available to implementers of client cache agents, manager cache agents or manager directories. 
-By making calls against this object-oriented API, cache controller designers can
-create state machines that clearly and correctly implement metadata updates. 
-Conversely, designers of new coherence protocols are provided a framework
-within which to implement their protocol: filling out the response to each API call.
-
-Metadata objects are the fundamental abstraction used in this API.
-These objects are opaque sets of bits which are processed and mutated by the coherence policy API.
-Metadata are divided into client-side and manager-side classes,
-and any particular cache controller can store either or both types.
-
-Policy as opposed to protocol?
-
-While decomposing flows into traits has proven to be an effective strategy for managaing concurrency and complexity in cache controller design,
-this approach says nothing about how different coherence policies are represented within the flows.
+As in the previous chapter, we distinguish between coherence policies and coherence protocols.
+A coherence {\em policy} governs how the SWMR invariant is represented as metadata identifying available permissions on data blocks.
+A coherence {\em protocol} specifies the exact flows of messages and actions that must be propagated through the memory hierarchy in order to effect a policy.
+While decomposing flows into sub-flow traits has proven to be an effective strategy for managaing concurrency and complexity in cache controller design,
+this approach does not address how different coherence policies are represented within the flows.
 For example, what do the state update functions actually store in the metadata arrays?
-How are the messages required to be sent between agents actually created?
-In this section we prensent an interface address these questions, and moreover to 
-hold some parts of the controller design constant, while swapping out only the
-elements of controllers that are different between different policiies.
-To this end, we created a unified CoherencePolicy interface abstraction that provides the functionality required to implement the specified sub-flows.
-Specifically, we built an object-oriented API based around an abstraction of coherence policy metadata.
+How are the specific messages required to be sent between agents actually created?
+These are questions are a matter of policy.
 
-In the object-oriented programming (OOP) paradigm, \emph{``objects''} are abstractions that contain \emph{fields} of data that are mutated and accessed by procedural \emph{methods}.
+In this section we present an interface that allows protocol designers to cleanly answer these questions,
+Our goal in introducing this abstract interface is to hold some parts of the controller design constant,
+swapping out only the elements of controllers that differ across different policies.
+To this end, we have created a unified \emph{CoherencePolicy} interface
+that provides the functionality required to fill out the implementation of
+all required sub-flows generated by our global flow decomposition.
+Specifically, we propose an object-oriented API that is
+based around an abstraction of coherence policy metadata.
+
+\emph{Metadata objects} are the fundamental abstraction used in this interface.
+These objects are opaque sets of bits which are evaluated and mutated by the coherence policy.
+In the object-oriented programming (OOP) paradigm, ``objects'' are abstractions that contain \emph{fields} of data that are mutated and accessed by procedural \emph{methods}.
 In OOP, computer programs are designed by making them out of objects that interact with one another.
-In our case, we are forming critical portions of the cache controller logic by interacting with metadata about cache blocks that is stored in local memories.
-The specific format of the metadata can be changed without changing the methods that cache controller transactions use,
-allowing these aspects to be developed independently, and different metadata implementations to be swapped in easily.
+In our case, we are forming critical portions of the cache controller logic by interacting with object representing
+the metadata about cache block permissions that is stored in local memories.
 
+One advantage of deploying this particular abstraction is that
+the specific format and contents of the metadata can be changed without changing the methods that cache controller transactions
+use to generate control logic.
+This encapsultation allows these aspects of the cache controller to be developed independently,
+and different metadata implementations and policies to be easily swapped for one another.
+By making calls to the methods of these metadata objects, cache controller designers can
+create state machines or sub-flow transactions
+that cleanly and correctly implement metadata updates. 
+Conversely, designers of new coherence protocols are provided a framework
+within which to implement their desired policy;
+by filling out the response to each method call, they can be certain that the policy
+will be applied correctly across any compatible cache or directory controller.
 
-Based on the TileLink structure, we know that their are two kinds of Metadata.
-ClientMetadata stores the permissions available to a client in the face of incoming memory operations on a particular block
+Recall from the previous chapter that TileLink supports hierarchical nesting of protocols via the Manager-Client Pairing (MCP) framework \cite{beu2011manager}.
+Based this hierarchical structure, we are required to define two distinct types of Metadata objects,
+one for agents that act as clients and one for agents that act as managers.
+\emph{ClientMetadata} store the permissions available to a client as it attempts to 
+apply incoming memory operations to a particular block of cached data.
 They may also store protocol-specific information about the block, such as whether or not it has been dirtied by a write.
-ManagerMetadata store information about how the block has propagated through the clients for which this manager is responsible.
+\emph{ManagerMetadata} store information about how the block has propagated through the clients for which this manager is responsible.
 This might include some representation of the number of client sharers, or patterns of movement observed on that block.
+Any agent with access to a particular type of metadata is capable of utilizing the methods
+available on that metadata inside of its sub-flow transactions,
+and particular agents can store and utilize either or both types.
+For example, L1 caches store only ClientMetada, directories or last-level caches store only ManagerMetadata,
+caches that are intermediate in the hierarchy may store both types.
+
+The following subsections delineate the specific methods that we provide on each type of metadata.
+The methods fall into four main categories.
+Permissions check methods compare an incoming operation against the permissions available in the current metadata state, and determine
+whether the operation is allowed to proceed or what kind of followup action to take.
+Message creation methods are used to fill in the fields of TileLink message bundles, based on information about the ongoing transaction
+and messages that have been received in the past.
+Update methods mutate the metadata in response to an incoming operation or message.
+We also provide functions to fill in metadata values on hardware reset.
+Finally, we have defined a further object-oriented extension to the interface, which abstracts ``directory'' information about how copies of
+a cache block have been propagated among a manager's clients.
 
 \subsection{Client Metadata} 
 
-A ClientMetadata object consists of a set of bits that abstracts the “state” of a certain cache block,
-with respect to the permissions that the policy has made available on that block inside this particular client cache controller.
+A ClientMetadata object consists of a set of bits that represent the ``state'' of a certain cache block,
+i.e., the permissions that the policy has made available on that block inside this particular client cache controller.
 The metadata may also store other information about the cache block,
 for example whether it has been dirtied by a store operation.
-The complete API for ClientMetadata can be found in the scaladoc, but we provide a summary here.
-There are three types of calls that a controller can make against the API:
-permissions checks, message creations, and metadata updates.
+There are three types of method calls that a cache controller can make against ClientMetadata objects:
+permissions checks, message creation, and metadata updates.
+Permissions are expressed with respect to memory operations, which we define in Appendix~\ref{a.memopcodes}.
+When a permissions check fails, the ClientMetadata methods provide the controller logic with information about what actions are required next.
+Some of these actions may involve sending TileLink messages to the client's manager, and we provide methods to create those messages
+based on the current metadata.
+Another action may be to update the local metadata based on the memory operation.
+The complete API for ClientMetadata can be found in the Rocket Chip Generator~\cite{rocket} documentation, but we provide a summary here.
 
 \subsubsection{Permissions Checks}
 
@@ -337,102 +402,118 @@ Memory operation representations are discussed in Appendix~\ref{a.memopcodes}, b
 all of them requires either read or read-and-write permissions.
 
 \begin{description}
-\item[isValid()]
+\item[isValid():]
 Is the block's data present in this cache?
-\item[isHit(opcode: UInt)]
+\item[isHit(opcode: UInt):]
 Does this cache have permissions on this block sufficient to perform the specified memory operation?
 If true, the controller can perform the memory operation immediately.
-\item[isMiss(opcode: UInt)]
+\item[isMiss(opcode: UInt):]
 Does this cache lack permissions on this block sufficient to perform the specified memory op?
-If true, the controller needs to initiate a TileLink coherence transaction using makeAcquire().
-\item[requiresAcquireOnSecondaryMiss(firstop: UInt, secondop: UInt)]
+If true, the controller needs to initiate a TileLink coherence transaction using \code{makeAcquire}.
+\item[requiresAcquireOnSecondaryMiss(first: UInt, second: UInt):]
 Does a secondary miss on the block require another Acquire message?
-If true, in a controller that supports miss-under-miss transactions, initiate a second coherence transaction using makeAcquire().
-\item[requiresReleaseOnCacheControl(opcode: UInt)]
+If true, in a controller that supports miss-under-miss transactions, initiate a second coherence transaction using \code{makeAcquire}.
+\item[requiresReleaseOnCacheControl(opcode: UInt):]
 Does a cache control operation (e.g. a voluntary flush) require a Release message to be sent to outer memory?
-If true, the control needs to initiate a TileLink coherence transaction using makeVoluntaryRelease.
-\item[requiresVoluntaryWriteback()]
+If true, the controller needs to initiate a TileLink coherence transaction using \code{makeVoluntaryRelease}.
+\item[requiresVoluntaryWriteback():]
 Does an eviction caused by a capacity miss require a Release to be sent to outer memory?
-If true, the control needs to initiate a TileLink coherence transaction using makeVoluntaryWriteback.
+If true, the controller needs to initiate a TileLink coherence transaction using \code{makeVoluntaryWriteback}.
 \end{description}
 
 
 \subsubsection{Message Creation}
 
-These functions return TileLink channel bundles based on the combination of current metadata state and particular memory operations.
+These functions return TileLink channel bundles,
+which are constructed  based on a combination of the current metadata state
+and particular memory operation types.
 
 \begin{description}
-\item[makeAcquire(op\_code: UInt, client\_xact\_id: UInt, addr\_block: UInt) ]
-Constructs an Acquire message based on this metdata and a memory operation.
-\item[makeVoluntaryRelease(op\_code: UInt, client\_xact\_id: UInt, addr\_block: UInt, addr\_beat: UInt, data: UInt) ]
-Constructs a Release message based on this metadata for a cache control op.
-\item[makeVoluntaryWriteback(client\_xact\_id: UInt, addr\_block: UInt, addr\_beat: UInt, data: UInt) ]
-Constructs a Release message based on this metadata for a capacity eviction.
-\item[makeRelease(prb: Probe, addr\_beat: UInt, data: UInt) ]
-Constructs a Release message based on this metadata in order to respond to a Probe message from outer memory.
+\item[makeAcquire(opcode: UInt, id: UInt, addr: UInt):]
+Constructs an Acquire message, based on this metdata, for a memory operation.
+\item[makeVoluntaryRelease(opcode: UInt, id: UInt, addr: UInt, data: UInt):]
+Constructs a Release message, based on this metadata, for a cache control op.
+\item[makeVoluntaryWriteback(id: UInt, addr: UInt, data: UInt):]
+Constructs a Release message, based on this metadata, for a capacity eviction.
+\item[makeRelease(prb: Probe, data: UInt):]
+Constructs a Release message, based on this metadata, in order to respond to a Probe message from outer memory.
 \end{description}
 
 \subsubsection{Metadata Updates}
 
-These functions return new ClientMetadata objects whose internal state has been updated based on a particular coherence event or message received.
+These functions return mutated ClientMetadata objects whose internal state has been updated
+based on a particular coherence event or received message type.
 
 \begin{description}
-\item[onHit(op\_code: UInt) ]
-New metadata after a op\_code hits this block.
-\item[onCacheControl(op\_code: UInt) ]
-New metadata after op\_code releases permissions on this block.
-\item[onProbe(incoming: Probe) ]
+\item[onHit(opcode: UInt):]
+New metadata after an operation hits on this cache block.
+\item[onCacheControl(opcode: UInt):]
+New metadata after an operation releases permissions on this block.
+\item[onProbe(incoming: Probe):]
 New metadata after receiving a Probe message.
-\item[onGrant(incoming: Grant, pending: UInt) ]
+\item[onGrant(incoming: Grant, pending: UInt):]
 New metadata after receiving a Grant message in response to the pending memory operation.
+\item[onReset():]
+New metadata initialized after machine reset.
 \end{description}
 
-\subsubsection{On Reset}
+\subsection{ManagerMetadata} 
 
-We provide the ClientMetadata.onReset function to initialize any metadata storage arrays within a particular cache.
-
-\subsection{ManagerMetadata API} 
-
-ManagerMetadata is a set of bits that abstracts the “state” of certain cache block,
-with respect to the existence of copies of that block in all the client caches
-managed by this manager cache controller.
+A ManagerMetadata object consists of a set of bits that represent the ``state''
+of a particular cache block,
+i.e. the existence of copies of that block in any client caches
+managed by this agent.
 The metadata may also store other information about the cache block,
-for example a information about its movement pattern or ownership.
-The complete API for MasterMetadata can be found in the scaladoc,
-but we provide a summary here.
-There are three types of calls that a controller can make against the API:
-permissions checks, message creations, and metadata updates.
+for example information about its history, pattern of movement between clients,
+or ``ownership'' by clients.
+As with ClientMetadata, there are three types of method calls
+that an agent can make against ManagerMetadata objects:
+permissions checks, message creation, and metadata updates.
+Messages create by managers include Probes of their clients to trigger them
+to Release permissions, and Grants of additional permissions to clients
+trying to Acquire them.
+In addition to these method calls, ManagerMetadata incorporates an additional
+object-oriented abstraction, DirectoryRepresentation, which encapsulates
+how information about the location of copies of the managed cache blocks is stored.
+The complete API for ManagerMetadata can be found in the
+Rocket Chip Generator documentation~\cite{rocket}, but we provide a summary here.
 
 \subsubsection{Permissions Checks}
 
-These boolean functions answer questions about the permissions on a cache line, and in particular are used to determine what actions to take relative to specific memory operations.
+These boolean functions answer questions about the permissions on a cache block,
+and in particular are used to determine whether it is necessary to Probe any
+clients that currently may have copies of a particular cache block,
+with respect to a client's request to Acquire new permissions or a
+Release of the block from this agent.
 
 \begin{description}
-\item[requiresProbes(acq: Acquire) ]
-Does this Acquire require Probes to be sent to the other clients with copies?
-\item[requiresProbes(op\_code: UInt) ]
-Does this memory operation require Probes to be sent to all clients with copies?
-\item[requiresProbesOnVoluntaryWriteback() ]
- Does an eviction caused by a capacity missed require Probes to be sent to all clients with copies?
+\item[requiresProbes(acq: Acquire):]
+Does this Acquire require Probes to be sent to any other clients with copies?
+\item[requiresProbes(opcode: UInt):]
+Does this memory operation require Probes to be sent to any clients with copies?
+\item[requiresProbesOnVoluntaryWriteback():]
+Does an eviction caused by a capacity missed require Probes to be sent to any clients with copies?
 \end{description}
 
 \subsubsection{Message Creation}
 
-These functions return TileLink channel bundles to use as responses to Clients based on the combination of current metadata state and particular TileLink messages.
+These functions return TileLink channel bundles to use as responses to Clients,
+which are constructed  based on the combination of current metadata state and 
+past TileLink messages received.
 
 \begin{description}
-\item[makeProbe(dst: UInt, acq: Acquire) ]
+\item[makeProbe(dst: UInt, acq: Acquire):]
 Construct a Probe message based on this metadata in response to a particular Acquire message.
-\item[makeProbe(dst: UInt, op\_code: UInt, addr\_block: UInt) ]
+\item[makeProbe(dst: UInt, opcode: UInt, addr: UInt):]
 Construct a Probe message  based on this metadata in response to a particular cache control operation.
-\item[makeProbeForVoluntaryWriteback(dst: UInt, addr\_block: UInt) ]
+\item[makeProbeForVoluntaryWriteback(dst: UInt, addr: UInt):]
 Construct a Probe message based on this metadata for a capacity eviction.
-\item[makeGrant(rel: ReleaseFromSrc, manager\_xact\_id: UInt) ]
+\item[makeGrant(rel: Release, id: UInt):]
 Construct an appropriate Grant message to acknowledge a Release message.
-\item[makeGrant(acq: AcquireFromSrc, manager\_xact\_id: UInt, addr\_beat: UInt, data: UInt) ]
+\item[makeGrant(acq: Acquire, id: UInt, data: UInt):]
 Construct an appropriate Grant message to acknowledge an Acquire message.
 May contain single or multiple beats of data, or just be a permissions upgrade.
-\item[makeGrant(pri: AcquireFromSrc, sec: SecondaryMissInfo, manager\_xact\_id: UInt, data: UInt) ]
+\item[makeGrant(pri: Acquire, sec: SecondaryMissInfo, id: UInt, data: UInt):]
 Construct an appropriate Grant message to acknowledge an Acquire message, overriding some fields
 Used to respond to secondary misses merged into this transaction.
 May contain single or multiple beats of data.
@@ -440,65 +521,120 @@ May contain single or multiple beats of data.
 
 \subsubsection{Metadata Updates}
 
-These functions return new ManagerMetadata objects whose internal state has been updated based on a particular coherence event or message.
+These functions return mutated ManagerMetadata objects whose internal state has been updated based on a particular coherence event or TileLink message.
 
 \begin{description}
-\item[onRelease(incoming: ReleaseFromSrc) ]
+\item[onRelease(incoming: Release):]
 New metadata after receiving a Release message.
-\item[onGrant(outgoing: GrantToDst) ]
+\item[onGrant(outgoing: Grant):]
 New metadata after sending a Grant message.
+\item[onReset():]
+New metadata initialized after machine reset.
+This method can also be used to generate a generic ManagerMetadata object to access other API methods
+within controllers that do not store any metadata (for example a bus controller).
 \end{description}
 
-\subsubsection{On Reset}
+\subsubsection{Directory Representation}
 
-We provide the ManagerMetadata.onReset function to initialize
-any metadata storage arrays within a particular cache.
-This function can also be used to generate an empty ManagerMetadata object for API 
-use within controllers that do not store any metadata (for example a bus controller).
-
-\subsection{Directory Representation}
-
-We also provide an API for accessing and maintaining directory information on the propagation of cache blocks across all the clients under the purview of a particular manager. These functions are intended to be called from within the CoherencePolicy’s functions, and abstract the details of the storage format used in the directory.
-
+As a member of of the ManagerMetadata objects,
+we also provide an object-oriented API for accessing and maintaining directory information.
+These directory objects are responsible for tracking the propagation of cache blocks
+across all the clients under the purview of a particular manager.
+They abstract the details of the storage format used in the directory portion of the ManagerMetadata.
+For example, rather than using a full bit vector (where every bit represents whether or not a particular client contains a copy of the data block),
+a designer might instead choose to use a coarser representation
+or one based on a limited set of pointers to individual sharers~\cite{sorin2011primer}.
+Our goal was to allow the directory representation to be changed independently from
+the rest of the cache coherence policy or controller design.
+These DirectoryRepresentation objects' methods are intended to be called
+from within the CoherencePolicy's ManagerMetadata functions by policy authors,
+rather than externally by controller designers.
+The methods currently included in the DirectoryRepresentation API are:
 \begin{description}
-\item[def pop(prev: UInt, id: UInt): UInt]
-Remove id from the prev set of sharers, returning a new set
-\item[def push(prev: UInt, id: UInt): UInt]
-Add id to the prev set of sharers, returning a new set
-\item[def flush: UInt]
-Provide an empty set indicating no sharers
-\item[def none(s: UInt): Bool]
-True if there are no sharers
-\item[def one(s: UInt): Bool]
-True if there is a single sharer
-\item[def count(s: UInt): UInt]
-Total count of the sharers
-\item[def next(s: UInt): UInt]
-Provide the id of the sharer that should be contacted next
-\item[def full(s: UInt): UInt]
-Provide a full bitmap of all sharers, with 1 indicating a copy.
+\item[pop(id: UInt):] Remove id from the prior set of sharers, returning a new set.
+\item[push(id: UInt):] Add id to the set of sharers, returning a new set.
+\item[flush():] Provide an empty set that indicates no sharers.
+\item[none():] True if there are no shared copies among clients.
+\item[one():] True if there is a single copy at a client.
+\item[count():] Total count of the sharers among clients.
+\item[next():] Provide the id of the client that should be Probed next.
+\item[full():] Provide a full bitmap of all sharers, where a 1 indicates a copy.
 \end{description}
+
+Our intention when designing this inteface was to provide a way for CoherencePolicies
+to find out all information about sharer propagation that they need to operate correctly,
+without having to explicitly refer to the particular bits of the representation
+stored in the agents' metadata array.
+As we define additional policies and representations,
+we may expand this interface to address other questions.
 
 \subsection{Creating New Coherence Policies}
 
-We give designers planning to implement new coherence protocols several Scala traits
-containing abstract members.
-These traits are combined to form the \code{CoherencePolicy} interface.
-By filling in the missing functions, they can provide a complete coherence policy
-that will interoperate with our supplied cache controllers and TileLink networks.
-These functions are a superset of the object-oriented APIs discussed in the previous sections,
-and are called from within the \code{ClientMetadata} and \code{ManagerMetadata} member methods.
+So far we have discussed the object-oriented API that our methodology provides to
+protocol flow and cache controller designers, with presents them with coherence metadata objects
+to manipulate.
+We now discuss provisioning the other side of the interface, from the perspective
+of developers of new coherence policies.
 
+We give designers planning to implement new coherence policies several Scala traits
+containing abstract declarations of a variety of methods, which are themselves in turn
+used to implement the coherence metadata object methods discussed in the previous subsections.
+These three traits are combined to form the complete \code{CoherencePolicy} interface.
+The three traits are:
 \begin{description}
 \item[HasCustomTileLinkMessageTypes] defines the custom, coherence-policy-defined message types, as opposed to the built-in ones. Policies must enumerate the custom messages to be sent over each channel, as well as which of them have associated data.
 \item[HasClientSideCoherencePolicy] contains all functions required for client coherence agents. Policies must enumerate the number of client states and define their permissions with respect to memory operations. Policies must fill in functions to control which messages are sent and how metadata is updated in response to coherence events.
 \item[HasManagerSideCoherencePolicy] contains all functions required for manager coherence agents. Policies must enumerate the number of manager states. Policies must fill in functions to control which Probe and Grant messages are sent and how  metadata should be updated in response to coherence events.
 \end{description}
 
+By filling in the missing implementations of the methods defined in these traits, 
+coherence policy developers can provide a complete coherence policy
+that will interoperate seamlessly with our supplied cache controllers and TileLink networks.
+It is possible to reuse implementations of certain traits to improve code reuse across \code{CoherencePolicy} implementations,
+in cases where a Client or Manager agent's behavior is the same as under another policy.
+In either case, a concrete \code{CoherencePolicy} subclass provides implementations for every method.
+An instance of such a class is a Scala object that can be passed through a hierarchy of
+Chisel Modules and used by any associated coherence metadata object implementations.
+We discuss the parameterization of the memory system components by \code{CoherencePolicies}
+in the next section.
+
+The complete API for the \code{CoherencePolicy} interface can be found in the
+Rocket Chip Generator documentation~\cite{rocket}.
+It is similar enough to the \code{ClientMetadata} and \code{ManagerMetadata} interfaces that
+we do not reproduce it here.
+The differences mainly revolve around taking the state information encapsulated
+in Metadata objects and making them explicit parameters of the CoherencePolicy methods.
+Under this organization, the functions defined in these traits
+are called from within the \code{ClientMetadata} and \code{ManagerMetadata} member methods.
+This encapsulation means that the internals of those classes do not have to be changed
+when new coherence policies are defined.
+Similarly, if we change the Metadata representations in the future,
+modules which use the Metadata objects' methods will not have to be changed.
+
+The decisions captured by the \code{CoherencePolicy} are exposed to cache controller authors through
+the coherence metadata objects.
+As discussed in more detail in the next section,
+an additional advantage of this organization is that the Parameters object
+associated with the coherence metdata object can be used to set the widths of the fields of the
+TileLink channel bundles that are the outputs of many of the inteface's methods.
+
+\section{Parameterization and Coherence Policies}
+
+In this section we will discuss the interplay between Context-Dependent Environments (CDEs),
+which we introduced in Chapter~\ref{c.cde},
+and the CoherencePolicy and Metadata objects.
+We will first discuss how 
+
+Associate with TL parameters.
+Tied to coherence metadata objects: in agents with multiple types of objects, accessing the methods
+automatically parameterizes the width of the bundles correctly!
+Dir -> CP -> TL -> Metadata.
+Especially useful for inner vs outer.
+
+Currently only parameter provided to Policy is directory format, but more could be introduced
 
 \section{Hierarchical Translation Between Protocols}
 
-TileLink supports hierarchical nesting of protocols via the Manager-Client Pairing (MCP) framework \cite{beu2011manager}.
 In terms of our Coherence 
 Hierarchical agent has both ClientMetadata and ManagerMetadata. 
 Check the opcode against the ClientMetadata to launch a transaction in the next level.
@@ -507,20 +643,21 @@ CoherencePolicy's job is to determine which outer transaction is needed.)
 
 We handle translation via a set of pre-defined memory opcodes (see Appendix~\ref{}.).
 
-\section{Concrete Protocols in RocketChip}
+
+\section{Concrete Protocols in the Rocket Chip Generator}
 
 We now present a family of five protocols that we have implemented using Chisel, TileLink, CoherencePolicy
-and our flow-based cache controllers in the Rocket Chip Generator \cite{rocket}.
+and our flow-based cache controllers in the Rocket Chip Generator~\cite{rocket}.
 These protocols are based around a subset of the classic five state MOESI model
-first introduced by Sweazey and Smith \cite{sweazey1986class}.
+first introduced by Sweazey and Smith~\cite{sweazey1986class}.
 The protocols contain some subset of the following stable client metadata states~\cite{sorin2011primer}:
 \begin{description}
-\item[I]. The block is invalid. The cache either does not contain the block or it contains a potentially stale copy that it may not read or write.
-\item[M]. The block is valid, exclusive, owned, and potentially dirty. The block may be
+\item[I:] The block is invalid. The cache either does not contain the block or it contains a potentially stale copy that it may not read or write.
+\item[M:] The block is valid, exclusive, owned, and potentially dirty. The block may be
 read or written. The cache has the only valid copy of the block, the cache must respond to
 requests for the block, and the copy of the block at the LLC/memory is potentially stale. 
-\item[S].The block is valid but not exclusive, not dirty, and not owned. The cache has a read-only copy of the block. Other caches may have valid, read-only copies of the block.
-\item[E].  The block is valid, exclusive, and clean. The cache has a read-only copy of the
+\item[S:] The block is valid but not exclusive, not dirty, and not owned. The cache has a read-only copy of the block. Other caches may have valid, read-only copies of the block.
+\item[E:] The block is valid, exclusive, and clean. The cache has a read-only copy of the
 block. No other caches have a valid copy of the block, and the copy of the block in the
 LLC/memory is up-to-date. 
 \end{description}
@@ -528,25 +665,38 @@ LLC/memory is up-to-date.
 We have also implemented a more advanced \emph{migratory} protocol. 
 This protocol is a reactive protocol, based on proposals by~\cite{stenstrom-isca93,cox-isca93},
 that tracks the behavior of cache blocks over time,
-identifies migratory behaviors,
-and proactively revokes status on the written block in order to make it available to be consumed.
-Table~\ref{tab:protocols} lays out the relative capabilities of these five protocols.
+identifies migratory behaviors of individual cache blocks,
+and proactively Releases permissions on a newly written block in order to make it available to be consumed
+with requiring a Probe/Release sub-flow.
+The specialization of the protocol to adapt to migratory movement patterns is captured dynamically
+by additional Client states.
+
+Table~\ref{tab:protocols} lays out the relative capabilities of these five policies.
+The client states that effectively differentiate the protocols are not strictly supersets of one another,
+allowing us to choose a protocol appropriate to the context in which it is deployed.
 
 \begin{table}[t] 
 \begin{center}
 \begin{tabular}{|l|c|c|c|c|c|} 
 \hline
-Name & States & R+W       & RO        & Clean     & Migration \\ \hline
+Name & C. States & R+W       & RO        & Clean     & Adaptive \\ \hline
 MI        & 2 & \ding{52} &           &           & \\ \hline
 MEI       & 3 & \ding{52} &           & \ding{52} & \\ \hline
 MSI       & 3 & \ding{52} & \ding{52} &           & \\ \hline
 MESI      & 4 & \ding{52} & \ding{52} & \ding{52} & \\ \hline
 Migratory & 7 & \ding{52} & \ding{52} & \ding{52} & \ding{52} \\ \hline
 \end{tabular}
-\caption{Overview of protocols available in Rocket Chip.}
+\caption{Overview of features of protocols currently available in the Rocket Chip Generator.}
 \label{tab:protocols}
 \end{center}
 \end{table}
+
+In addition to the five different policies, we also provide three different hierarchical agent implementations.
+These include two types of Broadcast networks, and a LXCache.
+The LXCache can be used to implement any outer cache.
+All the controller implementations can be combined with any policy,
+as well as a TileLink-compatible NoC,
+in order to make a complete protocol fabric.
 
 Performance measurements, holding design parameters constant (other than core count?).
 Figure~\ref{} shows MI vs MEI for read-only data.
@@ -571,41 +721,69 @@ Flow determines when to send TileLink message.
 TileLink determines the possible shapes/ordering/priority of flows (to safe ones).
 TileLink determines what types of messages Policy can output.
 
+Integration with Parameters: associate TileLink parameters with coherence metadata objects
+Dir -> CP -> TL -> 
+
 \section{Directions for Future Work}
 
-Design of custom protocols
-We want to allow hooks for software control of coherence states.
-Also handled via opcodes targetting individual cache blocks.
-Trigger voluntary releases.
-Integration with VLS.
-See appendix.
-Also want to enable software control of which protocol to use, via mode switch or for particular memory regions.
+The most concrete direction for future work in this area is to use our CoherencePolicy interface
+in the design of custom protocols that feature additional adaptability features.
+These features could involve automatically detecting memory access patterns in hardware,
+and proactively managing data placement policies accordingly, similar to 
+the Migratory policy whose features we discussed in a previous section of this chapter.
+Alternatively, we might want to enable hooks to allow for software control of coherence states,
+possibly via further memory opcodes targetting individual cache blocks and triggering new transaction flows.
+This approach could also involve integration with other software-based data placement strategies, such as VLS~\cite{VLS}.
+Appendix~\ref{} provides an overview of related work in this area.
 
-Verification and synthesis from the same description, automatically.
-While our flow descriptions should also be compatible with CMP-based tools,
-actually automated such a toolchain is not within the scope of this thesis.
+Past designs for adaptively coherent shared memory systems, such as Standford FLASH \cite{kuskin-archnews94}, 
+have incorporated multiple protocols on top of a single hardware substrate. 
+We expect that it will be relatively straightforward  to emulate this strategy by
+running multiple protocols on a single TileLink interconnection substrate.
+The open question is how best to enable software control over which protocol to use for which data.
+For example, should this specialization be specified via a global mode switch, or instead for particular memory regions.
+The latter implies that multiple protocols would be in operation on the same network at the same time.
+Ideally, we will be able to capture such complicated meta-protocols using the same set of interfaces we have defined here.
 
-Automatic generation of controllers via Bluespec-style rules.
-After breaking a set of global message flow transactions into sets of localized rules,
-it would be better to automatically infer the control dependencies between them.
-Our Chisel description is concise enough that is it easier to reason about than the standard approach,
-but still introduces opportunity for human error.
-Ideally, we would also automatically infer the contents of CoherencyPolicy functions from a set of decision points extracted from flow descriptions.
-For now, they must be filled in manually.
+Moving from investigations of concrete policy designs to the process of designing policies,
+we hope that future work will exploit improvements in Chisel functionality to close the remaining gap in
+automating the process of producing verification and synthesis from the same description.
+While we expect the message flows described in this chapter are compatible with CMP-based tools,
+actually automating such a fully integrated verification workflow is not within the scope of this thesis.
 
-Futher design space exploration.
-Multi-level hierarchies.
-Energy consumption of data movement.
-Storage vs energy tradeoffs: e.g. Directory representations.
+The next step in accomplishing the aforementioned verification goal is to furnish capabilities for
+automatic generation of controllers via Bluespec-style rules built on top of Chisel.
+While this thesis has provided an algorithm for  breaking a set of
+global message flow transactions into sets of localized rules,
+we still manually implemented the non-interference control logic for those localized rules.
+While our current Chisel description is concise enough that is it easier to reason about than the traditional Verilog approach,
+it still introduces opportunity for human error in translating the sub-flows and constructing the TSHRs.
+A superior approach might be for a Bluespec-style ``rule engine'' generator to automatically infer the control dependencies between sub-flows.
+Ideally, future investigations will address the verification advantages of automatically generated rule engines while
+contrasting them with the resource efficiency of the hand-written scoreboard logic that we currently deploy.
+
+Along similar lines of attack, we would also ideally be able to automatically infer the implementations of CoherencyPolicy methods
+based on a set of decision points extracted from flow descriptions.
+For now, the policy methods are filled in manually.
+Since we already identify the nodes in the message flow graphs that differentiate the flows by
+inroducing divergent sub-flows, it should be possible to re-cast those decision nodes as the implementation of certain methods,
+particularly those related to permission checks.
+
+As this toolset matures, we anticipate a wealth of design space exploration opportunities to arise.
+The hierarchical nature of TileLink makes it possible to generate arbitrarily nested multi-level memoruy hierarchies.
+Improvements to the Chisel ecosystem are advancing the state of the art in FPGA-based energy consumption modelling.
+Future work should deploy these capabilities to measure the efficacy of data movement strategies,
+as well as questions related to storage versus communication costs, for example, the coarseness of directory representations.
+We hope that our open source frameworks will prove to be a valuable tool for memory hierarchy researchers.
 
 \section{Conclusion}
 
 Cache coherence protocol design is one of the toughest challenges in computer architecture.
-Through better abstractions, we have attempt to reduce the burden put on hardware devs
+Through better abstractions, we have attempt to reduce the burden put on hardware developers
 to correctly interpret the implicit semantics of abstract coherence models in their implementations.
-We propose a top-down approach to protocol specification based on message flows, and provided a strategy
+We propose a top-down approach to protocol specification based on message flows, and provide a strategy
 for transforming such specifications into Chisel implementations of cache controllers.
 We also utilize object-oriented programming to encapsulate the policy-specific decisions encoded
-in the flows, making it easy to swap policies without changing any controller code.
-Opens the door to more flexible and customizable protocol design, which will be important
+in the flows, making it easy to swap policies without changing any controller HDL source code.
+This approach opens the door to more flexible and customizable protocol design, which will be important
 to the future of energy-efficiency in the on-chip memory hierarchy.
