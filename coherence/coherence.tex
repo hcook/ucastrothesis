@@ -623,25 +623,75 @@ TileLink channel bundles that are the outputs of many of the inteface's methods.
 In this section we will discuss the interplay between Context-Dependent Environments (CDEs),
 which we introduced in Chapter~\ref{c.cde},
 and the CoherencePolicy and Metadata objects.
-We will first discuss how 
+CoherencePolicy objects are parameterized by the DirectoryRepresentation that they use.
+More complicated policies could potentially be additionally parameterized in order to tune their heuristic behavior.
+Metadata objects are parameterized by the TileLinkParameters objects of the TileLink network with which they are associated.
+Figure~\ref{fig:cdepolicy} illustrates these relationships.
 
-Associate with TL parameters.
-Tied to coherence metadata objects: in agents with multiple types of objects, accessing the methods
-automatically parameterizes the width of the bundles correctly!
-Dir -> CP -> TL -> Metadata.
-Especially useful for inner vs outer.
+We include a CoherencePolicy as a member of the TileLinkParameter case class that stores all the information
+about channel widths associated with a particular TileLink realm (see Chapter~\ref{s.tlparam}).
+In other words, there is a one-to-one mapping between CoherencePolicies and TileLink networks.
+However, we can use the context-dependent capability of our CDEs to 
+inject multiple TileLink realms into a single controller,
+which allows us in turn to stitch together multi-level protocols through hierarchical agents
+that have coherence metadata objects associated with each TileLink realm.
 
-Currently only parameter provided to Policy is directory format, but more could be introduced
+TileLinkParameters are therefore associated with and used by the coherence policy metadata objects.
+Specifically, the ``geographical'' parameter \code{TLKey} is set based on whether the metadata belongs to the inner or outer realm.
+Thus, in hierarchical agents with multiple types of metadata objects, accessing the methods
+discussed in this chapter automatically and correctly parameterizes the width of the bundles those methods produce.
+This organization reduces code complexity by automatically determining the correct set of TileLinkParameters to use to produce data on a particular channel,
+as well as to reference the correct coherence policy when making flow control decisions in a hierarchical system.
 
 \section{Hierarchical Translation Between Protocols}
 
-In terms of our Coherence 
-Hierarchical agent has both ClientMetadata and ManagerMetadata. 
-Check the opcode against the ClientMetadata to launch a transaction in the next level.
-(TileLink determines the ordering/interleaving of the outer transaction with the inner transaction;
-CoherencePolicy's job is to determine which outer transaction is needed.)
+TileLink supports a hierarchical transaction structure that allows protocol transactions
+to be nested inside one another, as we discussed in Chapter~\ref{s.tlhier}
+based on the MCP framework proposed by \cite{beu2011manager}.
+Building off of this capability, our goal is to enable different coherence policies to be employed at each level,
+depending on that level's particular scale and requirements.
+At the protocol level, this means that when sub-flows of a protocol transaction
+occur in different coherence realms, we need to provide capabilities for
+new sub-flows to be initiated based on information taken from the previous sub-flow
+that happened in the other realm.
+Doing so requires a translation between inner and outer realms,
+which we facilitate via memory operation codes and the
+coherence metadata object methods previously discussed in this chapter.
 
-We handle translation via a set of pre-defined memory opcodes (see Appendix~\ref{}.).
+A set of pre-defined memory opcodes
+form an interface through which different policies in our protocol family can communicate.
+Appendix~\ref{a.memopcodes} delineates the current set of opcodes used in the Rocket Chip generator.
+The salient detail is that these operations encode information about whether read permission or write permission
+must be acquired or released in order to effect the desired operation.
+
+Any hierarchical agent has both ClientMetadata (associated with the outer realm)
+and ManagerMetadata (associated with the inner realm).
+Performing a translation between realms necesssitates utilizing methods on both types of metadata objects,
+based on the TileLink messages that triggered the new inner or outer sub-flow.
+TileLink determines the ordering/interleaving of the outer transaction with the inner transaction;
+and the CoherencePolicy's job is to determine which translated transaction is needed.
+There are two pairs of TileLink messages that cross realm boundaries,
+Acquire/Grant and Probe/Release.
+We discuss each in turn.
+
+To continue a Acquire transaction originating in the inner realm
+by initiating a sub-flow in the outer coherence realm, we check the opcode
+of the original transaction's Acquire message against the ClientMetadata stored in this agent.
+If the metadata indicates that an outer transaction is required, this agent (acting as a client),
+sends a further request to its manager and awaits a Grant response.
+
+Another transalation occurs when a hierarchical agent receives a Probe message from
+the outer coherence realm.
+In this case, the outer Probe's opcode must be compared against the permissions stored in the ClientMetadata.
+If these permissions would be reduced, the inner realm's ManagerMetadata must be consulted in order
+to determine what Probe messages to forward to which agents.
+Only after the inner realm's Release messages have been collected can an outer Release message be generated
+based on the ClientMetadata.
+
+Overall, TileLink determines the ordering/interleaving of the outer transaction with the inner transaction;
+and the CoherencePolicy's job is to determine which outer transaction is needed.
+By defining a set of operations in terms of which permissions they acquire or release,
+we enable multiple policies to intermesh in the formation of a single, multi-level, hierarchical protocol.
 
 
 \section{Concrete Protocols in the Rocket Chip Generator}
@@ -695,7 +745,7 @@ In addition to the five different policies, we also provide three different hier
 These include two types of Broadcast networks, and a LXCache.
 The LXCache can be used to implement any outer cache.
 All the controller implementations can be combined with any policy,
-as well as a TileLink-compatible NoC,
+as well as a TileLink-compatible Network-on-Chip (NoC),
 in order to make a complete protocol fabric.
 
 Performance measurements, holding design parameters constant (other than core count?).
@@ -705,26 +755,64 @@ Figure~\ref{} shows MESI vs Migratory for migratory data.
 
 \section{Discussion}
 
-A coherence {\em protocol} specifies the exact sequences of messages that must be propagated through the memory hierarchy in order to effect a policy.
-A coherence {\em policy} governs how the SWMR invariant is represented as metadata indentifying available permissions on data blocks.
-TileLink
+This chapter has introduced a set of abstractions and interfaces that make it more productive to write extensible
+coherence protocols.
+``The essence of abstractions is preserving information that is relevant in a given context, and forgetting information that is irrelevant in that context''~\ref{guttag2014introduction}.
+In that spirit, in this section I attempt to distill the relationships between our various protocol abstractions and highlight which information they encapsulate and expose.
 
-A protocol consists of many flows, each of which use Policy (for permissions) and TileLink (for ordering).
-Common sub-flows can be codified as local transactions, mixed together to form controller logic 
-(dependencies among sub-flows can be inferred from flows).
+A coherence protocol specifies the exact sequences of messages that must be propagated through the memory hierarchy in order to service memory operations,
+while preserving the Single-Writer-Multiple-Reader invariant throughout a logical epoch.
+Preserving this invariant implies that system creates a global total ordering of reads and write to any given memory location.
+Because metadata related to the permissions available on each cache block are distributed throughout the cache hierarchy,
+implementing a protocol becomes an exercise in atomically applying metadata updates across a distributed storage system.
+This mindset leads us to consider an approach to specifying coherence protocols based on transactions,
+and factoring out the expression of the transactions from their content and implementation.
 
+In our paradigm, a protocol consists of many transactional message flows.
+Flows may share common sub-flows, which can be codified as local transactions on state
+and then mixed together to form controller logic,
+with dependencies among sub-flows being inferred from the global flows.
+Flows are shaped by and utilize our metadata objects (to define policy-based permissions)
+and TileLink substrate (for deadlock-free ordering).
 Figure~\ref{} highlights the interplay between message flows, coherence metadata objects, and TileLink.
-Policy determines which flow is occuring.
-Policy determines set of custom TileLink message types, pick what to send.
-Flow determines which policy methods to call.
-Flow determines when to send TileLink message.
-TileLink determines the possible shapes/ordering/priority of flows (to safe ones).
-TileLink determines what types of messages Policy can output.
 
-Integration with Parameters: associate TileLink parameters with coherence metadata objects
-Dir -> CP -> TL -> 
+Coherence metadata objects abstract the policy decisions inherent to the protocol.
+Queries made against coherence metadata objects act to determine which flow or sub-flow is occuring.
+The policy encapsulated by the metadata objects defines the complete set of custom TileLink message types
+associated with a particular protocol,
+and determines which ones are sent within a given flow.
+A metadata-based policy is not concerned with anything having to do with time or ordering,
+only with what action needs to be taken when the system is in a particular state.
+This factoring allows multiple policies to be plugged in without changing controller design
+or network implementation.
 
-\section{Directions for Future Work}
+The TileLink framework acts a substrate that guarantees message flows will make forward progress
+as long as certain guarantees about agent behavior are satisfied.
+The framework thereby determines the possible shapes and relative priorities of flows,
+defining several sub-flow shapes that are safe to compose hierarchically.
+The framework determines what types of messages any coherence policy methods can possibly output.
+It is not not concerned with which messages should be sent under what conditions,
+just the relative priority and allowed orderings of the general message types.
+This factoring allows multiple network implementations to be plugged in without changing controller design
+or policy contents.
+
+Message flows act as the glue between policy contol logic and network substrate by informing the design of the agent controller logic itself.
+In specifying the local sub-flows that occur within each controller types, message flows determine
+which policy methods a particular agent calls upon receipt of particular TileLink message types,
+how it sends particular message types in response,
+and the ordering constraints in data and metadata reads and writes.
+This factoring allows the implementation of the cache controller logic
+to be changed without requiring changes to the policy description or network implementation.
+
+Taken together, we can see how the tradeoffs in information available within each abstraction
+help to make protocol design more productive and tractable.
+By eliding information about timing from policy decisions, policy designers only have to consider
+current state and desired operation, yet know what general type of message need be produced.
+By eliding information about policy from the networking substrate, NoC designers know what priority channels to provision, without focusing on the details of any one policy.
+Agent control logic implementations use both abstractions to simplify their code density and increase code reuse, and
+both abstractions provide structure to the high-level, global message flows that can be productively verified.
+
+\section{Future Work}
 
 The most concrete direction for future work in this area is to use our CoherencePolicy interface
 in the design of custom protocols that feature additional adaptability features.
@@ -734,7 +822,7 @@ the Migratory policy whose features we discussed in a previous section of this c
 Alternatively, we might want to enable hooks to allow for software control of coherence states,
 possibly via further memory opcodes targetting individual cache blocks and triggering new transaction flows.
 This approach could also involve integration with other software-based data placement strategies, such as VLS~\cite{VLS}.
-Appendix~\ref{} provides an overview of related work in this area.
+Appendix~\ref{a.swmem} provides an overview of related work in this area.
 
 Past designs for adaptively coherent shared memory systems, such as Standford FLASH \cite{kuskin-archnews94}, 
 have incorporated multiple protocols on top of a single hardware substrate. 
