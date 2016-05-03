@@ -1,9 +1,10 @@
 \chapter{TileLink: A Protocol Substrate for Coherence Policy Transactions }
 \label{c.tilelink}
 
-TileLink is a protocol framework designed to be a substrate for a set of cache coherence transactions
+TileLink is a protocol framework designed as a substrate for multiple cache coherence policies.
+transactions
 that implement a particular cache coherence policy within an on-chip memory hierarchy.
-Its purpose is to orthogonalize the design of the on-chip network and the implementation of the cache controllers from the design of the coherence protocol itself.
+Its purpose is to separate the design of the communication network and the implementation of the cache controllers from the design of the coherence protocol itself.
 This separation of concerns improves the modularity of the HDL description of the memory hierarchy,
 while also making validation and verification of individual memory system components more tractable.
 
@@ -11,14 +12,14 @@ Any cache coherence protocol that conforms to TileLink's transaction structure c
 By supplying a framework to apply transactional coherence metadata updates throughout the memory hierarchy, TileLink enables simplified expressions of the coherence policies themselves.
 Conversely, as long as newly designed controllers and networks make certain guarantees about their behavior,
 system-on-chip designers can be confident that incorporating them into their TileLink-based memory hierarchy will not introduce coherence-protocol-related deadlocks.
-As part of the Rocket Chip Generator project, I have supplied an initial library of cache controllers and physical networks that conform to this TileLink specification.
+As part of the Rocket Chip Generator project, I have supplied an initial library of cache controllers and on-chip physical networks that conform to this TileLink specification.
 
 TileLink is roughly analogous to the data link layer in the IP network protocol stack, but exposes some details of the physical link necessary for efficient cache controller implementation.
 This tradeoff avoids imposing any deserialization overhead on data being refilled between levels of an on-chip cache hierarchy, while also allowing for data bus widths
 that are tractable to place-and-route between the different caches in the hierarchy.
 Despite the emphasis on on-chip deployment, TileLink is suitable for implementing a coherence protocol in a multi-chip system as well.
 
-TileLink is designed to be extensible and supports a growing family of custom cache coherence policies implemented on top of it.
+TileLink is designed to be extensible and supports a growing family of custom cache coherence policies.
 TileLink also codifies a set of transaction types that are common to all protocols.
 In particular, it provides a set of transactions to service memory accesses made by agents that do not themselves have caches containing coherence policy metadata.
 These built-in transactions make TileLink a suitable target for the memory interfaces of accelerators, co-processors and DMA engines,
@@ -27,11 +28,12 @@ and allow such agents to automatically participate in a global shared memory spa
 TileLink is hierarchical, in that protocols based on it can be nested inside one another.
 This structure comports well with the tree-based structure of on-chip cache hierarchies.
 Memory requests that cannot be satisfied within a particular hierarchy level are translated into the protocol assigned to the next-outermost level. 
-TileLink uses a variation on the Manager-Client Pairing framework to provide encapsulation and translation between levels.
+TileLink uses a variation on the Manager-Client Pairing framework~\cite{beu2011manager}
+to provide encapsulation and translation between levels.
 
 The rest of this chapter lays out the case for TileLink and provides a detailed specification of its architecture.
 I discuss the assumptions and guarantees made by the various components of a TileLink system and explain how components implementing them interact
-to supply deadlock and starvation-free, coherent, global shared memory implementations.
+to supply deadlock and starvation-free, coherent, global shared-memory implementations.
 Details of how specific coherence policies extend TileLink are discussed in Chapter~\ref{c.coherence}.
 
 \section{Background}
@@ -49,10 +51,10 @@ Our definition of coherence must also augment the SWMR invariant with a data val
 that pertains to how values are propagated from one logical epoch to the next.
 This invariant states that the value of a memory location at the start of an epoch
 is the same as the value of the memory location at the end of its last read-write epoch \cite{sorin2011primer}.
-Violating either of these invariants could lead to values stored out by one core never becoming visible to other cores.
+Violating either of these invariants could lead to values written by one core never becoming visible to other cores.
 
 For the rest of this chapter, I distinguish coherence policies from coherence protocols.
-A coherence {\em policy} governs how the SWMR invariant is represented as metadata identifying available permissions on data blocks.
+A coherence {\em policy} governs how the SWMR invariant is represented as metadata identifying available permissions on data blocks and how to change those permissions.
 A coherence {\em protocol} specifies the exact flows of messages and state updates that must be propagated through the memory hierarchy in order to effect a policy.
 In other words, a policy specifies what access permissions are possible and when those permissions should be changed,
 whereas a protocol specifies how any changes are communicated to the rest of the hierarchy.
@@ -60,12 +62,17 @@ TileLink provides a single coherence protocol {\em template} on top of which man
 A particular cache coherence policy will specify permissions changes that must occur as a result of a serialization of memory operations.
 Using these policy-based decisions to fill in the TileLink template results in a complete coherence protocol.
 
-A protocol is made up of a specified set of allowable interactions between any agents that store and request copies of blocks of shared memory.
+A protocol comprises a specified set of allowable interactions between any agents that access copies of blocks of shared memory.
+A ``transaction'' made up of a subset of these interactions effects a single memory operation at the policy level,
+and a complete protocol will include many such transactions.
 We term legal sets of interactions between agents ``transactions'' because the SWMR invariant must be preserved,
-even though the permissions metadata is distributed throughout the hierarchy.
-Futhermore, all clients must agree on the serialization of permissions changes to a particular block.
-The distributed agents must achieve consensus about permissions and data despite the fact that there may be no ordering guarantees
+even though the permissions metadata being accessed is distributed throughout the hierarchy.
+Futhermore, all agents must agree on the serialization of permissions changes to a particular block.
+The distributed agents must achieve consensus about permission states and data values
+despite the fact that there may be no ordering guarantees
 provided by the underlying communication network, and so no trivial notion of global serialization of the transactions.
+Increasing memory operation throughput by allowing multiple transactions to be in-flight through the cache hierarchy
+at the same time is essential to efficiency, but significantly increases the complexity of the protocol implementation.
 
 The transactions that make up a coherence protocol tend to assume a particular shape depending on what
 assumptions are built into the underlying message transport network they rely upon.
@@ -98,16 +105,20 @@ Figure~\ref{fig:mcp} shows how this strategy can be applied in a divide-and-conq
 by carving them up into nested coherence realms.
 Applying the MCP framework to a memory sytem is advantageous because it provides
 encapsulation within each tier of the hierarchical protocol,
-which in turn mitigates the state space explosion
+which in turn mitigates the state-space explosion
 that makes multi-level protocol designs prohibitively expensive to verify.
 Standardization and encapsulation enable more rapid
 design of hierarchical coherence protocols via community-validated
 building blocks that can be readily compared, tested and evaluated \cite{beu2011manager}.
 
-\begin{figure}[t!]
+\begin{figure}[]
 \centering
-\includegraphics[width=0.8\columnwidth]{tilelink/figures/mcp-realm.pdf}
-\caption{Nested coherence realms in the MCP paradigm. TODO }
+\includegraphics[width=1\columnwidth]{tilelink/figures/mcp-realm.pdf}
+\caption[Nested coherence realms in the MCP paradigm.]{
+Nested coherence realms in the MCP paradigm. 
+The innermost realm consists of client agents and their manager, which may in
+turn be the client of a second tier manager in an outer realm, and so on.
+TODO }
 \label{fig:mcp}
 \end{figure}
 
@@ -115,7 +126,7 @@ building blocks that can be readily compared, tested and evaluated \cite{beu2011
 \label{s.arch}
 
 The fundamental components of the Tilelink specification are agents, channels, and transactions.
-{\em Agents} are the active participants in the protocol that send and receive messages in order to transfer copies of data through the memory hierarchy.
+{\em Agents} are the active participants in the protocol that send and receive messages in order to access copies of data through the memory hierarchy.
 Five independent {\em channels} transfer messages containing metadata and data between agents.
 A {\em transaction} is a specific sequence of messages sent between agents via these channels
 that cause certain agents to gain or lose permissions to access copies of cached data blocks.
@@ -144,7 +155,7 @@ Agents participating in the TileLink protocol are either:
 \item[Managers] that oversee the propagation of cache block permissions and data.
 \end{description}
 
-A client may be a cache, a DMA engine, an accelerator, or any other component that would like to participate in performing memory operations that target the coherent abstraction of global shared memory.
+A client may be a cache, a DMA engine, an accelerator, or any other component that would like to perform memory operations in a coherent global shared memory.
 Even clients that do not actually cache a copy of the data within themselves may use TileLink in order to see a coherent view of memory with respect to other clients that do have caches
 (i.e., to see dirtied data currently stored in those clients, see Section~\ref{s.uncached}).
 Clients are responsible for initiating transactions to gain or cede permissions on copies of cache blocks, and also for reporting on whether they possess certain permissions on those blocks
@@ -173,18 +184,18 @@ Hierarchical agents may or may not store a copy of the data locally, but they mu
 TileLink defines five independent transaction channels over which messages can be sent by agents in order to transfer information through the memory hierarchy.
 These channels may be multiplexed over the same physical link, but to avoid deadlock, TileLink specifies a priority amongst the channels that must be strictly enforced.
 Channels may contain both coherence metadata and actual copies of data.
-The amount of data associated with and tracked by a piece of metadata withint a particular level of TileLink is called a data {\em block}.
+The amount of data associated with and tracked by a piece of metadata within a particular level of TileLink is called a data {\em block}.
 
 The channels are:
 \begin{description}
 \item[Acquire.] Initiates a transaction to acquire access to a cache block with proper permissions. Also used to write data without caching it locally.
 \item[Probe.] Queries a client to determine whether it has a cache block or revoke its permissions on that cache block.
 \item[Release.] Acknowledges probe receipt, releasing permissions on the line along with any dirty data. Also used to voluntarily write back dirty data.
-\item[Grant.] Provides data or permissions to the original requestor granting, access to the cache block. Also used to acknowledge voluntary Releases.
+\item[Grant.] Provides data or permissions to the original requestor, granting access to the cache block. Also used to acknowledge voluntary Releases.
 \item[Finish.] Final acknowledgment of transaction completion from requestor, used for transaction serialization.
 \end{description}
 
-At present time, all channels are routed from clients to their manager or from the manager to its clients.
+At the present time, all channels are routed from clients to their manager or from the manager to its clients.
 Future extensions to TileLink may add support for client-to-client messaging.
 
 The prioritization of channels is Finish >> Grant >> Release >> Probe >> Acquire, in order of decreasing priority.
@@ -202,14 +213,16 @@ the desired ratio of metadata to data storage overhead,
 while the upper bound is set by the diminishing returns on exploiting spatial locality in most programs,
 as well as other cache coherence performance concerns that will be discussed in the next chapter.
 The data beat size, in contrast, is set based on the width of the underlying physical network.
-The width of the underlying network is exposed to TileLink agents in order to
+In the current implementation, thhe width of the underlying network is exposed to TileLink agents in order to
 improve the efficiency of refilling data into caches whose data array rows are of a matching size to the network width.
 Any agent generating messages that contain multiple beats of data is always responsible for incrementing the {\tt addr\_beat field}, as we will discuss in Section~\ref{s.types}.
+Exposed beats are just one possible physical implementation of TileLink, and are independent from the overall transaction message flow organization.
 
 \subsection{Transactions}
 
-Transactions consist of a series of messages sent between clients and their manager
-and the actions that those agents take upon reciept of a particular message.
+All changes in the coherence state can be understood as a series of transactions.
+Each transaction consists of a series of messages sent between clients and their manager
+and the actions that those agents take upon receipt of a particular message.
 Typical agent actions are updating local metadata, forwarding the message to other clients, or supplying copies of data in response.
 The overall outcome of a transaction is to change the permissions that some client has on a particular block.
 
@@ -289,8 +302,8 @@ or target different sub-block addresses (for ``uncached'' transactions). See Sec
 \begin{figure}[p]
 \centering
 \includegraphics[width=0.5\columnwidth]{tilelink/figures/ordered.pdf}
-\caption[Interleaved message flows demonstrating Manager blocking Acquires from multiple sources.]{
-Interleaved message flows demonstrating Manager blocking Acquires from multiple sources.
+\caption[Interleaved message flows  anager blocking Acquires from multiple sources.]{
+Interleaved message flows demonstrating a manager blocking Acquires from multiple sources.
 Clients A and B send an Acquire to a Manager, with Client B winning the race.
 The manager blocks Client A's transaction from making forward progress.
 Client A must process any Probes issues by Client B's transaction, even though Client A has an Acquire outstanding.
@@ -359,7 +372,7 @@ Grants on the same block sent to the same client can arrive out of order.
 Figure~\ref{fig:unordered} lays out this scenario in message sequence chart form.
 Because Grants can arrive out of order, TileLink requires the addition of a final acknowledgment channel (Finish), which ensures that each Grant has been received by the client.
 Note that some prior coherence protocols have addressed this particular complexity by blocking Probes until the Grant gets back to the source, but we will discuss why this solution can
-cause deadlick in a hierarchical, nested system in the next section.
+cause deadlock in a hierarchical, nested system in the next section.
 
 We now turn to the second concurrency-limiting responsibility, which is put on the client.
 If a client has an outstanding voluntary writeback transaction on a block,
@@ -390,7 +403,7 @@ Further restrictions on issuing multiple Acquires to sub-block addresses via bui
 \includegraphics[width=0.8\columnwidth]{tilelink/figures/standard5.pdf}
 \caption[Overview of a multi-level transaction's message flow.]{
 Overview of a multi-level transaction's message flow.
-After the hierarchical agent has Probed the clients under its purvue, it falls back on initiating a transaction in the outer realm,
+After the hierarchical agent has Probed the clients under its purview, it falls back on initiating a transaction in the outer realm,
 which is serviced by the outermost manager. Other branches of the memory hierarchy are Probed,
 and any Released data is Granted back to the original source Client A by way of the hierarchical agent.
 }
@@ -441,8 +454,11 @@ The inner Grant is dependent on the outer Grant response.
 Probes may be launched into other branches of the memory hierarchy.
 
 Figures~\ref{fig:acq-merge-5}~and~\ref{fig:acq-merge-5-2} lay out concurrency races between two multi-level transactions in message sequence chart form.
-The transaction whose Acquire is first to reach the outermost Manager required to gain sufficient permissions happens before the other transaction,
-and the final state of the data and permissions in the system must reflect this ordering.
+The transaction whose Acquire is first to reach the outermost Manager required to gain sufficient permissions 
+\emph{happens~before} the other transaction.
+The final state of the data and permissions in the system must reflect this ordering
+in order for their to be a global serialization of the transactions on the block.
+
 The transaction that won the race in the outer level may issue Probes into the branch of the memory hierarchy where the other transaction has begun to be processed.
 These Probes must be responded to with Releases to prevent deadlock in the outer level.
 However, this means that the inner transaction and outer transaction must be merged successfully.
@@ -522,19 +538,27 @@ Whether an address is cached or uncached is a property of the transaction, not t
  
 \subsection{Memory Model for Built-In Sub-Block Transactions}
 
-TileLink is intended to be compatible with the weak memory consistency model adopted by the RISC-V ISA, but it should be compatible with any similarly weak model.
-TileLink channels are not required to perform in-order delivery of messages, and hierarchical and manager agents are not required to process transactions in a particular order.
+TileLink is intended to be compatible with the weak memory consistency model adopted by the RISC-V ISA, and its design will not impose any performance overhead on any similarly weak model.
+Specifically, TileLink channels are not required to perform in-order delivery of messages, and hierarchical and manager agents are not required to process transactions in a particular order.
 Therefore, client agents are responsible for enforcing orderings between memory operations by
 waiting to initiate new transactions until all relevant outstanding transactions have been completed.
-Uncached transactions that do not return data to the client still receive acknowledgments of operation completion from the manager, which allows for clients to make decisions about when to issue further requests.
-It is worth noting that clients should always avoid issuing multiple requests to any particular address at the same time, as the Acquire messages may be reordered, resulting in non-sequential memory operation orderings.
+Uncached transactions that do not return data to the client still receive
+acknowledgments of operation completion from the manager,
+which allows for clients to make decisions about when to issue further requests.
+This division of labor means that TileLink can support stronger memory models,
+such as Sequential Consistency, by placing the burden of enforcing the
+stronger model on the agents that are issuing the memory operations.
+It is worth noting that even in a system with a weak memory model, 
+clients should always avoid issuing multiple requests to any particular address at the same time,
+as the Acquire messages may be reordered, resulting in non-sequential memory operation orderings
+to a single address.
 
 \subsection{Concurrency for Built-In Sub-Block Transactions}
 
 \begin{figure}[p]
 \centering
 \includegraphics[width=0.5\columnwidth]{tilelink/figures/acq-merge.pdf}
-\caption[Interleaved message flows merging of multiple ``uncached'' transactions.]{
+\caption[Interleaved message flows merging multiple ``uncached'' transactions.]{
 Interleaved message flows demonstrating merging of multiple ``uncached'' transactions from the same client.
 As long as the Acquires target different sub-block addresses they are safe to interleave.
 Multiple Grants and Finishes can also be in flight simultaneously, and the transaction terminates when the correct count of Finishes is accepted.}
@@ -579,13 +603,11 @@ unless the physical network is known to provide in-order delivery.
 \item Grants may only be blocked by Finishes.
 \item Releases may only be blocked by Finishes and Grants.
 \item Probes may only be blocked by Finishes, Grants, and Releases.
-\item If a client has an outstanding voluntary Release on a block, it will not respond to a Probe on that block until it receives the Release's corresponding Grant.VoluntaryAck.
+\item If a client has an outstanding voluntary Release on a block, it will not respond to a Probe on that block until it receives the Release's corresponding acknowledgment Grant.
 \item If a client has an outstanding voluntary Release on a block, it will not issue an Acquire on that block until it receives the Release's corresponding Grant.VoluntaryAck.
-\item If a manager has already has accepted an Acquire on a block, it will not issue Probes or Grants in response to a second Acquire on that block until it recieces a Finish from the first Acquire's source.
+\item If a manager has already has accepted an Acquire on a block, it will not issue Probes or Grants in response to a second Acquire on that block until it receives a Finish from the first Acquire's source.
 \item A manager will always include a copy of the data in a Grant, unless it can prove that the client had a copy of the block when the Acquire was accepted and no Probes from outer memory for that block have been received.
 \item Clients may not issue multiple Acquires with the same {\tt client\_xact\_id} and {\tt addr\_block} fields, unless they have different {addr\_beat}, {a\_type}, or {union} fields.
-\item In a multi-level system, the transaction whose Acquire is first to reach the outermost Manager required to gain sufficient permissions happens before the other transaction.
-The final state of the data and permissions in the system must reflect this ordering.
 \item A Hierarchical agent will block Probes from being forwarded from its outer client interface to its inner manager interface until it has received Finishes for all Grants on that block.
 \end{itemize}
 
@@ -752,14 +774,14 @@ manager\_xact\_id & UInt & Manager's id for the transaction \\ \hline
 \end{figure}
 
 For the convenience of designers implementing Client and Manager agents, we provide TileLinkNetworkPort modules which abstract away the details of the on-chip network implementation.
-These network ports automatically generate networking headers, perform SerDes for narrower physical network channels, and generate appropriate control flow logic.
+These network ports automatically generate networking headers, perform serialization/deserialization for narrower physical network channels, and generate appropriate control flow logic.
 The ports then expose simplified subsets of the TileLink channels to the agent modules.
 Figure~\ref{fig:agent} provides an overview of these two interfaces.
 
 {\em ClientTileLinkIO} consists of standard Acquire, Probe, Release, and Grant message channels.
 It does not include the Finish channel as generating those acknowledgments is handled by the ClientTileLinkNetworkPort.
 
-{\em ManagerTileLinkIO} consists of Acquire, Probe, Release, and Grant message channels that have additional data appended about the source or destination of messages, expressed in terms of the Client's id.
+{\em ManagerTileLinkIO} consists of Acquire, Probe, Release, and Grant message channels that have additional data appended about the source or destination of messages, expressed in terms of the client and managers' network identifiers.
 Acquires and Releases include their source id, and Probes and Grants are supplied a destination id.
 The Client id format and numbering is determined by the characteristics of the physical network and is encapsulated from TileLink.
 This interface does include a Finish channel so that the manager knows when to register the transaction as complete.
@@ -767,6 +789,7 @@ This interface does include a Finish channel so that the manager knows when to r
 Clients and managers may share a network port of the associated type as long as their pools of transaction identifiers are unique.
 In practice, we often support this requirement by utilizing routers that automatically prepend bits to the \code{client\_xact\_id} field
 for outgoing messages, while using the same bits to route incoming messages.
+This capability is useful for multiplexing ports in cases where the width of the interface is constrained.
 
 \section{TileLink Parameters}
 \label{s.tlparam}
@@ -878,9 +901,13 @@ This capability is essential for creating hierarchical trees of coherence agents
 
 \section{Discussion and Future Work}
 
-TileLink does not not include any specific bandwidth requirements as part of its specification.
+TileLink does not not include any specific bandwidth requirements as part of its specification,
+nor does it provide any quality-of-service (QoS) guarantees.
 It is up to the user to provision the widths of the data buses underlying each channel and fix the speed of their operation.  
-TileLink does expose aspects of the physical network layer in the form of the \code{TLDataBeats} parameter, which
+A QoS layer provided by the underlying physical network implementation could be used 
+to guarantee the relative priorities of channels, or to enforce performance targets for certain message types.
+
+Currently, TileLink does expose aspects of the physical network layer in the form of the \code{TLDataBeats} parameter, which
 controls what subset of a cache line can be provided to endpoints of a particular network per clock cycle.
 Current implementations resend the metadata for each beat of data.
 Future work could investigate the energy efficiency tradeoff between providing metadata per beat with no deserialization overhead,
@@ -893,7 +920,8 @@ utilize different transaction structures.
 One of these exceptions is the concept of ``ownership'', where a particular client with write privileges on a line is delegated by the manager
 to respond to coherence requests on that block.
 Inherent to ownership is the concept of direct, client-to-client data and permissions transfer.
-The challenge of adopting such measures is proving that TileLink will remain hierarchically composable.
+The challenge of adopting such measures is proving that TileLink will remain hierarchically composable,
+which is trivially the case for such transfers among clients within a particular realm.
 
 Addressing the ownership question is related to another area of future work:
 The applicability of TileLink to multi-chip coherent shared memory designs.
@@ -906,7 +934,9 @@ elements of speculation and rollback that we have yet to attempt to express with
 Other design decisions may prove unnecessarily detrimental in the bandwith/latency space of chip-to-chip communications.
 It is unclear whether addressing these concerns is best done within the context of TileLink, or whether we would
 do better to keep the specification specialized for the on-chip domain and fall back on other
-protocol substrates such as AXI or RapidIO to provide chip-to-chip coherence. 
+protocol substrates to provide chip-to-chip coherence.
+We are beginning to work with RapidIO to reuse the chip-to-chip coherence framework
+they have deployed with ARM's ACE to extend it to multiple sockets of SoCs.
 
 I am already confident that TileLink as a whole, and particularly the baked-in ``uncached'' transactions,
 are sufficiently general to be mapped to other coherence substrates.
