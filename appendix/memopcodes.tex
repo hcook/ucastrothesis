@@ -1,86 +1,6 @@
 \appendix{TileLink Memory Opcodes}
 \label{a.memopcodes}
 
-\section{Memory Opcodes} 
-
-  
-\begin{figure}[h]
-\begin{center}
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{p{1.2in}@{}p{0.8in}@{}p{0.6in}@{}p{0.4in}@{}p{0.2in}@{}p{0.2in}@{}p{0.4in}l}
-\\
-\instbitrange{168}{41} &
-\instbitrange{40}{8} &
-\instbitrange{7}{6} &
-\instbitrange{5}{4} &
-\instbit{3} &
-\instbit{2} &
-\instbitrange{1}{0} \\
-\cline{1-7}
-\multicolumn{1}{|c|}{---} &
-\multicolumn{1}{c|}{addr} &
-\multicolumn{3}{c|}{---} &
-\multicolumn{1}{c|}{w} &
-\multicolumn{1}{c|}{00} &
-Prefetches \\
-\cline{1-7}
-\\
-\cline{1-7}
-\multicolumn{1}{|c|}{data} &
-\multicolumn{1}{c|}{addr} &
-\multicolumn{2}{c|}{size} &
-\multicolumn{1}{c|}{a} &
-\multicolumn{1}{c|}{w} &
-\multicolumn{1}{c|}{01} &
-Uncached Get and Puts \\
-\cline{1-7}
-\\
-\cline{1-7}
-\multicolumn{1}{|c|}{data} &
-\multicolumn{1}{c|}{addr} &
-\multicolumn{1}{c|}{size} &
-\multicolumn{3}{c|}{aluop} &
-\multicolumn{1}{c|}{10} &
-Uncached Atomics \\
-\cline{1-7}
-\\
-\cline{1-7}
-\multicolumn{1}{|c|}{---} &
-\multicolumn{1}{c|}{addr} &
-\multicolumn{2}{c|}{size} &
-\multicolumn{1}{c|}{u} &
-\multicolumn{1}{c|}{w} &
-\multicolumn{1}{c|}{11} &
-Cached \\
-\cline{1-7}
-\end{tabular}
-\end{center}
-\caption{RISC-V base instruction formats.}
-\label{fig:baseinstformats}
-\end{figure}
-
-\begin{center}
-\begin{tabular}{M@{}R@{}S@{}R@{}O}
-\\
-\instbitrange{31}{20} &
-\instbitrange{19}{15} &
-\instbitrange{14}{12} &
-\instbitrange{11}{7} &
-\instbitrange{6}{0} \\
-\hline
-\multicolumn{1}{|c|}{imm[11:0]} &
-\multicolumn{1}{c|}{rs1} &
-\multicolumn{1}{c|}{funct3} &
-\multicolumn{1}{c|}{rd} &
-\multicolumn{1}{c|}{opcode} \\
-\hline
-12 & 5 & 3 & 5 & 7 \\
-I-immediate[11:0] & src & ADDI/SLTI[U]  & dest & OP-IMM \\
-I-immediate[11:0] & src & ANDI/ORI/XORI & dest & OP-IMM \\
-\end{tabular}
-\end{center}
-
-
 \begin{table}
 \centering
 \begin{tabular}{|l|l|l|}
@@ -133,4 +53,59 @@ They are derived from the interface between the Rocket pipeline and its data cac
 They correspond to some degree with the RISC-V RV64A memory operations.
 Similarly, Table~\ref{tab:opsizes} lays out the codes for expressing the size of operation
 that should occur in memory (for atomic operations).
+
+\begin{table}[h]
+\begin{center}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{p{1.2in}@{}p{0.8in}@{}p{0.6in}@{}p{0.4in}@{}p{0.2in}@{}p{0.2in}@{}p{0.4in}l}
+\\
+\instbitrange{168}{41} &
+\instbitrange{40}{8} &
+\instbitrange{7}{6} &
+\instbitrange{5}{4} &
+\instbit{3} &
+\instbit{2} &
+\instbitrange{1}{0} \\
+\cline{1-7}
+\multicolumn{1}{|c|}{---} &
+\multicolumn{1}{c|}{addr} &
+\multicolumn{3}{c|}{---} &
+\multicolumn{1}{c|}{w} &
+\multicolumn{1}{c|}{00} &
+Prefetches \\
+\cline{1-7}
+\\
+\cline{1-7}
+\multicolumn{1}{|c|}{data} &
+\multicolumn{1}{c|}{addr} &
+\multicolumn{2}{c|}{size} &
+\multicolumn{1}{c|}{a} &
+\multicolumn{1}{c|}{w} &
+\multicolumn{1}{c|}{01} &
+Uncached Get and Puts \\
+\cline{1-7}
+\\
+\cline{1-7}
+\multicolumn{1}{|c|}{data} &
+\multicolumn{1}{c|}{addr} &
+\multicolumn{1}{c|}{size} &
+\multicolumn{3}{c|}{aluop} &
+\multicolumn{1}{c|}{10} &
+Uncached Atomics \\
+\cline{1-7}
+\\
+\cline{1-7}
+\multicolumn{1}{|c|}{---} &
+\multicolumn{1}{c|}{addr} &
+\multicolumn{2}{c|}{size} &
+\multicolumn{1}{c|}{u} &
+\multicolumn{1}{c|}{w} &
+\multicolumn{1}{c|}{11} &
+Cached \\
+\cline{1-7}
+\end{tabular}
+\end{center}
+\caption{Proposed memory opcode encodings for Acquire and Probe messages.}
+\label{tab:memopformats}
+\end{table}
 

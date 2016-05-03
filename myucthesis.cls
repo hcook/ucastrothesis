@@ -353,8 +353,8 @@
 \begin{center}
 \fmsmallfont
   Committee in charge: \\
-{\@chair}, Co-chair \\
-{\@chairb}, Co-chair \\
+{\@chair}, Chair \\
+%{\@chairb}, Co-chair \\
 {\@othermembers} \\
   \bigskip \bigskip \bigskip
   {\@degreesemester \ \@degreeyear}
@@ -456,8 +456,8 @@ by\par
 \vspace{3ex}
 University of California, {\@campus}\par
 \vspace{3ex}
-{\@chair}, Co-chair\\
-{\@chairb}, Co-chair}
+{\@chair}, Chair\\
+} %{\@chairb}, Co-chair}
 \vspace{3ex}
 \end{center}}
 

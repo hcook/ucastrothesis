@@ -30,7 +30,7 @@ cleans += coherence/coherence.aux
 
 # Appenices
 deps += appendix/swmem.tex appendix/memopcodes.tex
-cleans += appendix/swmem.aux appendix/memopcodes.tex
+cleans += appendix/swmem.aux appendix/memopcodes.aux
 
 # The thesis itself. We move the PDF to a new filename so that viewers
 # don't keep on trying to reload the file as it's being written and
