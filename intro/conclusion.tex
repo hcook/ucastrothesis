@@ -8,7 +8,7 @@ on the design of future energy-efficient hardware architectures,
 and lays the groundwork for new methodologies in customizable hardware design.
 In extending the capabilities of a new hardware description language, I hope to have brought the agility and composability of functional, object-oriented software design to one of the most difficult design tasks in the hardware domain,
 namely that of coherent hierarchies of on-chip caches.
-In this chapter we will review my contributions and summarize the potential for design space exploration
+In this chapter, we will review my contributions and summarize the potential for design space exploration
 and iterative, agile hardware development that they enable.
 
 \section{Contributions}
@@ -28,8 +28,8 @@ and generators for cache controllers and datapaths, as well as hierarchical on-c
 \end{enumerate}
 
 Because Chisel is embedded in Scala, hardware developers can now use Scala's modern programming language features to encapsulate many useful high-level hardware design patterns.
-Metaprogramming, code generation and hardware design tasks are all implemented in the same source language.
-This single-source language approach encourages developers to write parameterized hardware generators rather than discrete instances of individual hardware blocks,
+Metaprogramming, code generation, and hardware design tasks are all implemented in the same source language.
+A single-source language approach encourages developers to write parameterized hardware generators rather than discrete instances of individual hardware blocks,
 which in turn improves code reuse both within a given design and across generations of design iterations.
 Chapter~\ref{c.tilelink} and Chapter~\ref{c.coherence} demonstrated how a design choice as complicated and pervasive as a multi-level cache coherence protocol can be made
 into a tuneable design parameter when properly factored out from the rest of the design.
@@ -53,8 +53,8 @@ all from the same source code base, but each specialized differently to evaluate
 
 While Chisel and Rocket Chip have proven to be highly productive tools for our research group,
 it is my belief that we have only uncovered the tip of the agile hardware development iceberg.
-As the tools continue to mature, the design patterns they make it easy to express will multiply.
-Until that time, we have had to constrain the space of designs which our abstractions make it possible to express.
+As the tools continue to mature, the design patterns that they make it easy to express will multiply.
+Until that time, we have had to constrain the space of designs that our abstractions make it possible to express.
 We now review some of the limitations of the current implementations.
 
 TileLink limits the shape of coherence transaction flow graphs so as to ensure they are both composable and deadlock-free.
@@ -62,7 +62,7 @@ However, the current shapes are not an exhaustive list of safe flow graphs,
 and restricting use of said additional safe flows may limit designers deploying TileLink networks in their designs
 from being able to adopt protocols with performance optimizations based around more complicated flows.
 TileLink has so far only been deployed within relatively small on-chip memory hierarchies,
-and as we strive to scale it to larger client counts involving multiple sockets
+and as we strive to scale it to larger client counts involving multiple sockets,
  we expect some of these concerns to begin to manifest. 
 
 The metadata objects that encapsulate the coherence policy are designed to be easily extensible with
@@ -177,7 +177,7 @@ and particularly coherent memory hierarchy design.
 My thesis is that the semantic gap between productive, verifiable descriptions and parameterized, efficient implementations
 is not a fundamental hurdle to the design of increasingly customized cache coherent memory heirarchies.
 By separating the concerns of message flows from policy desisions and the underlying network substrate,
-I have provide tools that naturally produce correct, composable implementations based on a high level description,
+I provide tools that naturally produce correct, composable implementations based on a high level description,
 smoothing over the semantic gap between them through beneficial layers of abstractions.
 By deeply parameterizing memory heirarchies, I encourage new SoC developers to rely on hardware generators
 and use them to explore novels areas of this rich design space.

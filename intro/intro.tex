@@ -349,8 +349,8 @@ Because Chisel is embedded in Scala, hardware developers can now use Scala's mod
 Designers may selectively deploy these patterns so as to generate graphs of Chisel components as productively as possible.
 Each module in a Chisel project can employ whichever design patterns best fit the problem at hand, and designers can freely compose modules and programming paradigms as they build up more complicated designs.
 
-Metaprogramming, code generation and hardware design tasks are all implemented in the same source language.
-This single-source language approach encourages developers to write parameterized hardware generators rather than discrete instances of individual hardware blocks,
+Metaprogramming, code generation, and hardware design tasks are all implemented in the same source language.
+A single-source language approach encourages developers to write parameterized hardware generators rather than discrete instances of individual hardware blocks,
 which in turn improves code reuse both within a given design and across generations of design iterations.
 When combined with multiple backends catering to different stages of the verification process, the generator-based approach is essential to enable a more agile approach to hardware design,
 in that it encourages the development of families of customizable designs.  
