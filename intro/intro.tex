@@ -9,8 +9,11 @@ expontential increases in computational performance that our information society
 As process scaling fails to produce further returns, architecture and design will have to take its place.
 
 New design challenges call for the creation of new tools and the adoption of new methogologies.
-Best practices for the hardware design industry have been complacently static.
+Best practices for the hardware design industry have been complacently static,
+as reflected in the languages used by practitioners and the costs of
+bringing new chip designs to market.
 In the meantime, software engineers have continued to push the boundaries of what is possible with the computers we have architected for their use.
+The open source and agile development movements have fundamentally altered the landscape of how new software tools are produced.
 
 This thesis is an attempt to apply the productivity of modern software tools to the design of future hardware architectures.
 In extending the capabilities of a new hardware description language, I hope to have brought the agility and composability of functional, object-oriented software design to one of the most difficult design tasks in the hardware domain,
@@ -21,10 +24,10 @@ I first discuss the genesis of modern hardware design objectives,
 and then constrast those needs with the capabilities of modern design practices.
 In doing so, I hope to illustrate the role my thesis plays in improving the latter and bringing them to bear on the former. 
 
-\section{Landscape of Computer Architecture}
+\section{The Landscape of Computer Architecture}
 
 As I began my tenure at Berkeley, the computer processor industry was pivoting to adopt multicore chip designs,
-in which multiple processors with a shared memory hierarchy are integrated into a single chip.
+in which multiple processor cores with a shared memory hierarchy are integrated into a single chip.
 This change was not perceived as welcome; the difficulties in achieving improved software performance that strongly scales with core count are substantial~\cite{Asanovic:EECS-2006-183}.
 Over the preceding decade, the processor industry had been backed into the multicore corner by three fundamental bottlenecks:
 \begin{description}
@@ -191,7 +194,7 @@ which in turn will encourage them to develop their designs more iteratively whil
 incorporating design space exploration between each step.
 This section provides context for what we hope to accomplish by mining the software development community's best practices in both language and methodology areas.
 
-\subsection{The role of language}
+\subsection{The Role of Language}
 
 Today's dominant hardware-description languages (HDLs), Verilog and VHDL, were originally developed as hardware simulation languages
 and were only later adopted as a basis for hardware synthesis \cite{palnitkar2003verilog}.
@@ -229,7 +232,7 @@ As constructing hardware generators, rather than creating hardware designs, requ
 support for reconfiguring individual components based on the context in which they are deployed,
 our new language also improves on the limited module parameterization facilities of traditional HDLs.
 
-\subsection{The role of the development model}
+\subsection{The Role of the Development Model}
 
 The design productivity crisis created by the demands of energy-efficient, post-Dennard SoC design has implications that reach beyond
 languages and tools to methodology itself.
@@ -289,7 +292,7 @@ we then deploy it against an increasing series of more complex tests on more hea
 Emphasizing a sequence of prototypes reduces verification simulation effort, since early hardware prototypes run orders of magnitude faster than simulators. 
 
 Conventional wisdom holds that the frequent deliverable prototypes required by agile methodology are incompatible with hardware development, but our research group has not found this to be the case \cite{lee-micro15}.
-Firstly, using fabricatable prototypes increases validation
+First, using fabricatable prototypes increases validation
 bandwidth, as a complete tape-in RTL design can be mapped to FPGAs to run
 end-application software stacks orders of magnitude faster than with
 software simulators. 
@@ -298,29 +301,16 @@ of tape-in designs (together with accompanying QoR
 numbers from the VLSI toolflow) fulfill the same function as working
 prototypes do in agile software development, providing a way for
 end-customers to give early and frequent feedback to validate design decisions.
-Secondly, while mask costs for modern designs are on the order of multiples of millions of dollars depending on process technology \cite{sperling}, 
+Second, while mask costs for modern designs are on the order of multiples of millions of dollars depending on process technology \cite{sperling}, 
 organizations like MOSIS continue to offer multi-project wafers, where many independent projects are put on the same reticle, to help amortize these mask costs.
 As Moore's Law continues to slow down, industry will spend more time on each process technology node, leading to further reductions in the cost of doing multiple design iterations
 %of increasingly complicated prototype test chips
 at a given node.
 %By reducing the minimal die size to around 1.5x1.5 mm we were able to bring the total cost of our prototype chips down to \$30,000, and 
 
-Adopting the agile methodology dovetails nicely with our previously discussed tooling preference for building chip generators over particular chip design instances.
-As we iteratively add features to the generator, we can retarget our efforts to adapt to performance and energy feedback from the previous iteration.
-By parameterizing the design generator, we can smoothly scale the size of its output from test chip to final product without rewriting any hardware modules.
-Note that we produced three distinct families of chips over four years in an interleaved fashion, {\em all from the same source code base}, but each specialized differently to evaluate distinct research ideas.
-Figure~\ref{fig:tapeouts} presents the complete timeline of tapeouts that occurred using software components discussed in this thesis.
-In particular, Chapter~\ref{c.parameters}'s focus on design parameterization techniques reflects the criticality of generator parameterization capabilities to our agile developement process.
-
-As we will see, even a design choice as complicated and pervasive as a multi-level cache coherence protocol can be madeinto a tuneable design parameter when properly factored out from the rest of the design.
-By providing support for generating a family of compatible protocols rather than one single protocol, my thesis has enabled us to iterate on protocol design as we scaled up the size and complexity of the memory hierarchy across chip iterations.
-%We were able to move from single-level, broadcast-based two-state protocol to a multi-level, hierarchical, directory-based, six-state protocol
-
 \begin{figure}[t!]
 \centering
-\vspace{-0.15in}
 \includegraphics[width=\columnwidth]{intro/figures/tapeouts.pdf}
-\vspace{-0.3in}
 \caption[Lineage of UC Berkeley chip tape-outs.]{Lineage of UC Berkeley chip tape-outs during the completion of my thesis.
 The 28nm Raven chips combines a 64-bit RISC-V vector microprocessor with on-chip switched-capacitor DC-DC converters and adaptive clocking ~\cite{zimmer2015raven}.
 The 45nm EOS chips integrate a 64-bit dual-core RISC-V vector processor with monolithically-integrated silicon photonic links ~\cite{lee2014eos}.
@@ -330,10 +320,22 @@ six EOS chips on IBM's 45nm SOI process,
 and one SWERVE chip on TSMC's 28nm process. 
 }
 \label{fig:tapeouts}
-\vspace{-0.1in}
 \end{figure}
 
-\subsection{Chisel}
+Adopting the agile methodology dovetails nicely with our previously discussed tooling preference for building chip generators over particular chip design instances.
+As we iteratively add features to the generator, we can retarget our efforts to adapt to performance and energy feedback from the previous iteration.
+By parameterizing the design generator, we can smoothly scale the size of its output from test chip to final product without rewriting any hardware modules.
+Chapter~\ref{c.parameters}'s focus on design parameterization techniques reflects the criticality of generator parameterization capabilities to our agile developement process.
+Note that we produced three distinct families of chips over four years in an interleaved fashion, {\em all from the same source code base}, but each specialized differently to evaluate distinct research ideas.
+Figure~\ref{fig:tapeouts} presents the complete timeline of tapeouts that occurred using software components discussed in this thesis.
+In total, we have taped out four Raven chips on STMicroelectronics' 28nm FD-SOI process, six EOS chips on IBM's 45nm SOI process, and one SWERVE chip on TSMC's 28nm process.
+
+As we will see in Chapter~\ref{c.tilelink} and Chapter~\ref{c.coherence}, even a design choice as complicated and pervasive as a multi-level cache coherence protocol can be made
+into a tuneable design parameter when properly factored out from the rest of the design.
+By providing support for generating a family of compatible protocols rather than one single protocol, my thesis has enabled us to iterate on protocol design as we scaled up the size and complexity of the memory hierarchy across chip iterations.
+%We were able to move from single-level, broadcast-based two-state protocol to a multi-level, hierarchical, directory-based, six-state protocol
+
+\subsection{Chisel and Rocket Chip}
 
 In order to increase the agility of hardware design,
 together with my collaborators I have developed Chisel (Constructing Hardware In a Scala Embedded Language), a new hardware design language that addresses the aforementioned language deficiencies~\cite{chisel}.
@@ -341,42 +343,38 @@ Chisel is a Domain-Specific Embedded Language (DSEL) that is built on top of the
 Chisel is intended to be a substrate that provides a Scala abstraction of primitive hardware components, such as registers, muxes, and wires.
 Any Scala program whose execution generates a graph of such components is now a feasible way to fabricate hardware designs --- the Chisel compiler translates the graph into a backend language suitable for simulation or hardware synthesis.
 For a particular design represented as a component graph, Chisel's backend can generate a fast, cycle-accurate C++ simulator, or it can generate structural Verilog suitable for either FPGA emulation or ASIC synthesis.
+However, this low-level interface to convenient backend automation is only scratching the surface of Chisel's capabilities.
 
 Because Chisel is embedded in Scala, hardware developers can now use Scala's modern programming language features to encapsulate many useful high-level hardware design patterns.
 Designers may selectively deploy these patterns so as to generate graphs of Chisel components as productively as possible.
 Each module in a Chisel project can employ whichever design patterns best fit the problem at hand, and designers can freely compose modules and programming paradigms as they build up more complicated designs.
+
 Metaprogramming, code generation and hardware design tasks are all implemented in the same source language.
 This single-source language approach encourages developers to write parameterized hardware generators rather than discrete instances of individual hardware blocks,
 which in turn improves code reuse both within a given design and across generations of design iterations.
-When combined with multiple backends catering to different stages of the verification process, the generator-based approach is essential to enable a more agile approach to hardware design.
+When combined with multiple backends catering to different stages of the verification process, the generator-based approach is essential to enable a more agile approach to hardware design,
+in that it encourages the development of families of customizable designs.  
+By encoding microarchitectural and domain knowledge these generators, we can quickly create different
+chip instances customized for particular design goals and constraints~\cite{shacham-micro10}.  
+As constructing hardware generators requires
+support for reconfiguring individual components based on the context
+in which they are deployed, a particular focus of my contributions to Chisel was enable it to improve
+upon the limited module parameterization facilities of traditional
+hardware description languages.
 
 Beyond implementing the Chisel compiler and releasing it as an open source software tool, my research group has worked to understand what types of hardware designs tasks can be encapsulated within reusable libraries that extend Chisel's functionality.
 In some cases, these libraries have taken the form of discrete modules or parameterized functional units.
 In other cases, the correct abstraction takes the form of a compiler pass, higher-order-functional API, or even a self-contained mini-DSEL.
 Additionally, we have developed some pure Scala software utilities that aid in the hardware design process.
-We have composed these various libraries of tools and generators into a complete SoC chip generator~\cite{rocket}.
-In the next section, I discuss the specific contributions my thesis makes to the Chisel ecosystem to aid in the design of cache coherent memory hierarchies.
+We have composed these various libraries of tools and generators into a complete SoC chip generator.
 
-\subsection{Rocket Chip Generator}
-
-Chisel's first-class support for object-orientation and
-metaprogramming allows hardware designers to write generators,
-rather than individual instances of designs, which in turn encourages
-the development of families of customizable designs.  By encoding
-microarchitectural and domain knowledge
-these generators, we can quickly create different
-chip instances customized for particular design goals and constraints
-\cite{shacham-micro10}.  As constructing hardware generators requires
-support for reconfiguring individual components based on the context
-in which they are deployed, a particular focus of Chisel is to improve
-upon the limited module parameterization facilities of traditional
-hardware description languages.
-
-The Rocket chip generator is written in Chisel and constructs a
-RISC-V-based platform~\cite{asanovic-riscv-mpreport2014}.
-The generator consists of a collection of
+The Rocket Chip generator~\cite{rocket} is written in Scala and Chisel and constructs a
+RISC-V-based SoC platform~\cite{asanovic-riscv-mpreport2014}.
+The generator is open source, and consists of a collection of
 parameterized chip-building libraries that we can use to generate
-different SoC variants.  By standardizing the interfaces that are used
+different SoC variants.  
+Figure~\ref{fig:generators} presents the collection of library generators and their interfaces within the Rocket Chip generator.
+By standardizing the interfaces that are used
 to connect different libraries' generators to one another, we have
 created a plug-and-play environment in which it is trivial to swap out
 substantial components of the design simply by changing configuration
@@ -384,18 +382,14 @@ files, leaving the hardware source code untouched.  We can also both
 test the output of individual generators as well as perform
 integration tests on the whole design, where the tests are also
 parameterized so as to exercise the entire design-under-test.
+All the tape-outs enumerated in the previous section were created from different parameterizations of this single source code base.
+In the next section, I outline the specific contributions my thesis makes to the Chisel and Rocket Chip ecosystems to aid in the design of cache coherent memory hierarchies.
 
-Figure~\ref{fig:generators} presents the collection of library generators and their interfaces within the Rocket chip generator.
-These generators can be parameterized and composed into a wide variety of SoC designs.
-
-\begin{figure}[t!]
+\begin{figure}[p]
 \centering
-\vspace{-0.3in}
-\includegraphics[width=.6\columnwidth]{intro/figures/rocket-chip.pdf}
-\vspace{-0.15in}
+\includegraphics[width=0.8\columnwidth]{intro/figures/rocket-chip.pdf}
 \caption[Sub-components of the Rocket Chip generator.]{The Rocket Chip generator consists of the following sub-components: A) Core generator B) Cache generator C) RoCC-compatible coprocessor generator D) Tile generator E) TileLink generator F) Peripherals }
 \label{fig:generators}
-\vspace{-0.1in}
 \end{figure}
 
 \section{Contributions}

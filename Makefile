@@ -9,8 +9,8 @@ default: mthesis.pdf # default target if you just type "make"
 # included to show how you can process data as you compile your thesis
 # using standard GNU make constructs.
 
-deps += intro/intro.tex
-cleans += intro/intro.aux
+deps += intro/intro.tex intro/conclusion.tex
+cleans += intro/intro.aux intro/conclusion.aux
 
 #intro/processed.tex: intro/sample.tex
 #	sed -e s/terrible/wonderful/ $< >$@

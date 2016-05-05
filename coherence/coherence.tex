@@ -30,8 +30,8 @@ and from which synthesizable designs can be generated,
 we can smooth over the gap between protocol specification and implementation.
 
 In the previous chapter, I presented TileLink,
-a protocol framework designed to be a substrate for cache coherence transactions that implement a particular cache coherence policy within an on-chip memory hierarchy. 
-TileLink provides structure in the form of sequences of messages that can be sent between interacting, coherent agents in order
+a protocol framework designed to be a substrate for cache coherence transactions that implement a particular cache coherence policy. 
+TileLink provides structure by defining sequences of messages that can be sent between interacting, coherent agents in order
 to implement a protocol that is guaranteed to be deadlock free in a nested, hierarchical memory system.
 However, TileLink by design says nothing about the particular details of the coherence policy,
 which drives the creation and use of these message types.
@@ -854,11 +854,11 @@ Along similar lines of attack, we would also ideally be able to automatically in
 based on a set of decision points extracted from flow descriptions.
 For now, the policy methods are filled in manually.
 Since we already identify the nodes in the message flow graphs that differentiate the flows by
-inroducing divergent sub-flows, it should be possible to re-cast those decision nodes as the implementation of certain methods,
+inroducing divergent sub-flows, it should be possible to re-cast those decision nodes as the implementations of certain methods,
 particularly those related to permission checks.
 
 As this toolset matures, we anticipate a wealth of design space exploration opportunities to arise.
-The hierarchical nature of TileLink makes it possible to generate arbitrarily nested multi-level memoruy hierarchies.
+The hierarchical nature of TileLink makes it possible to generate arbitrarily nested multi-level memory hierarchies.
 Improvements to the Chisel ecosystem are advancing the state of the art in FPGA-based energy consumption modelling.
 Future work should deploy these capabilities to measure the efficacy of data movement strategies,
 as well as questions related to storage versus communication costs, for example, the coarseness of directory representations.

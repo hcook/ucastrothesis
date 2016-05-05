@@ -1,0 +1,185 @@
+\chapter{Conclusion}
+\label{c.conclusion}
+
+As Moore's Law slows and process scaling yields only small returns,
+computer architecture and design are poised to undergo a renaissance.
+This thesis brings the productivity of modern software tools to bear
+on the design of future energy-efficient hardware architectures,
+and lays the groundwork for new methodologies in customizable hardware design.
+In extending the capabilities of a new hardware description language, I hope to have brought the agility and composability of functional, object-oriented software design to one of the most difficult design tasks in the hardware domain,
+namely that of coherent hierarchies of on-chip caches.
+In this chapter we will review my contributions and summarize the potential for design space exploration
+and iterative, agile hardware development that they enable.
+
+\section{Contributions}
+
+In order to increase the agility of hardware design,
+together with my collaborators I have developed Chisel (Constructing Hardware In a Scala Embedded Language), a new hardware design language that addresses the aforementioned language deficiencies~\cite{chisel}.
+Chisel is a Domain-Specific Embedded Language (DSEL) that is built on top of the Scala programming language~\cite{scala}.
+My contributions focus on extending Chisel by providing libraries for hardware developers to use in describing the configuration and behavior of on-chip memory hierarchies.
+My specific contributions are as follows:
+
+\begin{enumerate}
+\item A novel general framework for context-dependent parameterization of hardware generators.
+\item A set of Chisel libraries for generating extensible cache-coherent memory hierarchies.
+These include the TileLink protocol transaction framework, an object-oriented coherence metadata API,
+and generators for cache controllers and datapaths, as well as hierarchical on-chip networks.
+\item A methodology for decomposing high-level descriptions of cache coherence protocols into controller-localized transactions.
+\end{enumerate}
+
+Because Chisel is embedded in Scala, hardware developers can now use Scala's modern programming language features to encapsulate many useful high-level hardware design patterns.
+Metaprogramming, code generation and hardware design tasks are all implemented in the same source language.
+This single-source language approach encourages developers to write parameterized hardware generators rather than discrete instances of individual hardware blocks,
+which in turn improves code reuse both within a given design and across generations of design iterations.
+Chapter~\ref{c.tilelink} and Chapter~\ref{c.coherence} demonstrated how a design choice as complicated and pervasive as a multi-level cache coherence protocol can be made
+into a tuneable design parameter when properly factored out from the rest of the design.
+Chapter~\ref{c.parameters}'s focus on extending Chisel with novel parameterization techniques reflects the criticality of generator parameterization capabilities to our agile developement process.
+By providing support for generating a family of interchangable protocols rather than one single protocol, my thesis has enabled us to iterate on protocol design as we scaled up the size and complexity of the memory hierarchy across chip iterations.
+
+We have composed these various libraries of tools and generators into a complete, open source SoC chip generator, called Rocket Chip.
+Rocket Chip  standardizes the interfaces that are used
+to connect different libraries' generators to one another, enabling
+a plug-and-play environment in which it is trivial to swap out
+substantial components of the design through parameterization.
+We can also both test the output of individual generators as well as perform
+integration tests on the whole design, where the tests are also
+parameterized so as to exercise the entire design-under-test.
+The Rocket Chip generator and its test suites are freely avaiable as an open source project,
+and we hope that it will form the basis of future research projects and industrial applications.
+We used Rocket Chip to produce three distinct families of chips over four years in an interleaved fashion, 
+all from the same source code base, but each specialized differently to evaluate distinct research ideas.
+
+\section{Limitations}
+
+While Chisel and Rocket Chip have proven to be highly productive tools for our research group,
+it is my belief that we have only uncovered the tip of the agile hardware development iceberg.
+As the tools continue to mature, the design patterns they make it easy to express will multiply.
+Until that time, we have had to constrain the space of designs which our abstractions make it possible to express.
+We now review some of the limitations of the current implementations.
+
+TileLink limits the shape of coherence transaction flow graphs so as to ensure they are both composable and deadlock-free.
+However, the current shapes are not an exhaustive list of safe flow graphs,
+and restricting use of said additional safe flows may limit designers deploying TileLink networks in their designs
+from being able to adopt protocols with performance optimizations based around more complicated flows.
+TileLink has so far only been deployed within relatively small on-chip memory hierarchies,
+and as we strive to scale it to larger client counts involving multiple sockets
+ we expect some of these concerns to begin to manifest. 
+
+The metadata objects that encapsulate the coherence policy are designed to be easily extensible with
+further custom states and custom TileLink messages.
+Currently, they are only parameterized by the format of the directory information held in ManagerMetadata,
+and this might be desirable to change for protocols with more complicated heuristics.
+While different realms may employ different coherence policies,
+the existing design assumes only a single policy will ever be used in a particular realm.
+Allowing the policy to be switched at runtime, or allowing multiple policies to be depolyed at the same time,
+will require being able to automatically expanding the encapsulated state.
+
+\section{Future Challenges}
+
+As I envision how future efforts in this area can build on the groundwork provided by this thesis and address its limitations,
+the unifying theme is increased automation and closing the loops between
+design, specification, implementation, deployment, evaluation, and verification.
+
+\subsection{Design Space Exploration}
+
+Context-dependent environments are a powerful way to express the parameters of a design and allow free ones
+to be filled in at elaboration time by an external tool.
+We can search a design for constraints and use those we extract to limit the space of designs that we consider.
+However, further work is required to automate the exploration process and 
+to close the loop between feedback from one iteration of examining a
+set of design instances and selecting points for further exploration.
+By capturing and storing the results of past explorations that included certain parameterizations
+of certain subsets of a design, we can inform the direction of future searches.
+By building up models based on parameter values, we can potentially avoid even having to elaborate those
+portions of the design for some evaluations.
+Intelligent design space exploration is the next frontier of improving designer productivity.
+
+\subsection{Formal Specification and Verification}
+
+While many protocols can be expressed within TileLink's's MCP paradigm,
+there are some major classes of protocol performance optimization that could
+utilize different transaction structures.
+The challenge of adopting such measures is proving that TileLink will remain hierarchically composable
+if these additional flows are introduced.
+Ideally, as we develop a formal specification of TileLink, we will be able to be more confident
+in proposing modifications to TileLink while guaranteeing that the fundamental properties of the framework remain unchanged.
+We are also working to use this type of specification to derive sets of unit tests for individual modules
+implementing one or more TileLink interfaces.
+Such automatically generated unit test suites should be able to provide directed
+testing of the hardware implementations to prove that they are TileLink-compatible.
+There may be further opportunities afforded by hooking such automated test generation into our design space exploration tools.
+
+I also hope that future work will exploit improvements in Chisel functionality to close the remaining gap in
+automating the process of producing verification and synthesis results from the same high-level description.
+While the techniques propsoed in this thesis greatly reduce the burden put on cache controller designers,
+they still require human intervention to translate from the the local flow descriptions into individual controllers' logic.
+Deriving the entirety of controllers by employing Bluespec-style rule engines would be the next step in
+automated protocol development.
+
+\subsection{Energy Consumption of Application-Specific Protocols}
+
+The most concrete direction for future work is to use our coherence policy interface
+in the design of custom protocols that feature additional adaptability features.
+These include policies that are entirely driven by hardware heuristics, like the Migratory policy
+I created, as well as novel policies based on software intervention in protocol behavior.
+Given the focus on specialization, creating protocol adapted to particular memory traffic patterns
+characteristic of important applications or design patterns is likely to be a fruitful approach.
+
+As this toolset matures, I anticipate a wealth of design space exploration opportunities to arise
+from the combination of policy decision and storage resource allocation.
+The hierarchical nature of TileLink makes it possible to generate arbitrarily nested multi-level memory hierarchies.
+Improvements to the Chisel ecosystem are advancing the state of the art in FPGA-based energy consumption modelling.
+Future work should deploy these capabilities to measure the efficacy of data movement strategies,
+as well as questions related to storage versus communication costs, for example, the coarseness of directory representations.
+I hope that our open source frameworks will prove themselves valuable to memory hierarchy researchers.
+
+\section{Final Remarks}
+
+In this brave new power-constrained, post-Dennard world, energy efficiency has become a first-order design goal.
+As Moore's law falters, companies will have to improve the energy/operation of their designs
+while working with the same transistor resources.
+This trend has already become manifest in the embedded and mobile device industry via the adoption of SoC designs, which boast an ever increasing number of specialized co-processors on each chip, and it seems clear that heterogenous clouds of specialized processors cannot be far behind.
+Moving beyond specialized cores, energy consumption within the memory hierarchy is rapidly becoming a significant design concern.
+The high cost associated with communication thereby increases the value of managing the memory hierarchy well.
+The majority of the data movement activity that occurs within a multicore chip's on-chip memory hierarchy is done automatically at the behest of the cache controllers and the coherence policy that governs their behaviors.
+How to define customizable or specialized coherence policies and
+implement the associated protocols efficiently is an important design challenge for future energy-efficient architectures. 
+
+Designing new cache coherence protocols or supporting a wider variety of more complicated protocols is not a task hardware engineers can undertake lightly.
+Verifying the correctness of a cache coherence protocol is a challenging task, and
+verifying that a correct protocol has been implemented correctly is even more difficult.
+Unfortuntately, the semantic gap between verifiable, high-level abstract descriptions of protocols and 
+concrete HDL implementations of those same protocols is so wide that verifying the correctness of the protocol
+does not come close to guaranteeing the correctness of the final implementation.
+As I have shown, improving the capabilities of hardware description languages offers us a way to lighten this burden:
+By raising the level of abstraction at which cache controller logic can be described and at which synthesizable designs can be generated,
+we can smooth over the gap between protocol specification and implementation.
+In doing so, we can make cache coherence protocol selection another knob in the toolbox of a hardware designer focused on exploring a space of heterogenous hardware designs.
+
+The design productivity crisis created by the demands of energy-efficient, post-Dennard SoC design has implications that reach beyond
+languages and tools to methodology itself.
+As a small group of researchers attempting to design and fabricate multiple families of processor chips,
+and lacking the massive resources of industrial design teams,
+we were forced to abandon standard industry practices and explore different
+approaches to design hardware more productively.
+The development model we adopted as a result of our limited resources, changing requireents, and more productive hardware tools
+eventually led us to define a set of principles to guide a new agile hardware development methodology.
+
+In our agile hardware methodology, we first generate a trivial prototype with a minimal working feature set and push it all the way through the toolflow to a point where it could be taped out for fabrication.
+Emphasizing a sequence of prototypes by building generators over design instances ultimately reduces verification simulation effort, 
+since early hardware prototypes run orders of magnitude faster than simulators.
+As we iteratively add features to the generator, we can retarget our efforts to adapt to performance and energy feedback from the previous iteration.
+By parameterizing the design generator, we can smoothly scale the size of its output from test chip to final product without rewriting any hardware modules.
+This thesis thereby serves as a case study in leveraging lessons learned from the software world by
+applying aspects of the software agile development model to hardware design,
+and particularly coherent memory hierarchy design.
+
+My thesis is that the semantic gap between productive, verifiable descriptions and parameterized, efficient implementations
+is not a fundamental hurdle to the design of increasingly customized cache coherent memory heirarchies.
+By separating the concerns of message flows from policy desisions and the underlying network substrate,
+I have provide tools that naturally produce correct, composable implementations based on a high level description,
+smoothing over the semantic gap between them through beneficial layers of abstractions.
+By deeply parameterizing memory heirarchies, I encourage new SoC developers to rely on hardware generators
+and use them to explore novels areas of this rich design space.
+The power to rapidly compose and extend designs in this way will be at the heart of the nascent agile hardware development movement.
+

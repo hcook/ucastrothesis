@@ -921,7 +921,8 @@ One of these exceptions is the concept of ``ownership'', where a particular clie
 to respond to coherence requests on that block.
 Inherent to ownership is the concept of direct, client-to-client data and permissions transfer.
 The challenge of adopting such measures is proving that TileLink will remain hierarchically composable,
-which is trivially the case for such transfers among clients within a particular realm.
+which is trivially the case for such transfers among clients within a particular realm,
+but may be more difficult to extend to cross-realm transactions.
 
 Addressing the ownership question is related to another area of future work:
 The applicability of TileLink to multi-chip coherent shared memory designs.
@@ -936,7 +937,7 @@ It is unclear whether addressing these concerns is best done within the context 
 do better to keep the specification specialized for the on-chip domain and fall back on other
 protocol substrates to provide chip-to-chip coherence.
 We are beginning to work with RapidIO to reuse the chip-to-chip coherence framework
-they have deployed with ARM's ACE to extend it to multiple sockets of SoCs.
+they have deployed with ARM's ACE to extend it to multiple sockets.
 
 I am already confident that TileLink as a whole, and particularly the baked-in ``uncached'' transactions,
 are sufficiently general to be mapped to other coherence substrates.
