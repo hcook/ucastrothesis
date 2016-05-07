@@ -16,7 +16,7 @@ will become an increasingly desirable feature of an on-chip memory hierarchy.
 How to define customizable coherence policies, implement the associated protocols efficiently,
 and manage the aforementioned communication/performance tradeoff is an important design challenge for future energy-efficient architectures. 
 
-Unfortunately, designing more complex, customizable cache coherence protocols is not a task hardware engineers can undertake lightly.
+Unfortunately, designing more complex, customizable cache coherence protocols is not a task hardware engineers can easily take on.
 Protocol correctness can be determined via formal analysis of an abstract model of the protocol and memory system.
 However, there are a huge number of ways in which details of the concrete implementation can undermine abstract correctness.
 As in any distributed system, modules designed by different teams may interact in unexpected ways,
@@ -24,10 +24,18 @@ and assumptions about atomically visible behaviors or event priority levels may 
 leading to corrupted data or system deadlock.
 Hardware designers shoulder the burden of maintaining the implicit semantics of the abstracted protocol model
 throughout the concrete controllers and networks that they build.
-This chapter proposes that improving the capabilities of HDLs offers us a path foward to lighten this design burden.
+This chapter proposes that improving the capabilities of hardware description languages (HDLs) offers us a path foward to lighten this design burden.
 By raising the level of abstraction at which cache controller logic can be described,
 and from which synthesizable designs can be generated,
 we can smooth over the gap between protocol specification and implementation.
+
+A coherence protocol specifies the exact sequences of messages that must be propagated through the memory hierarchy in order to service memory operations,
+while preserving the Single-Writer-Multiple-Reader invariant throughout a logical epoch.
+Preserving this invariant implies that system creates a global total ordering of reads and write to any given memory location.
+Because metadata related to the permissions available on each cache block are distributed throughout the cache hierarchy,
+implementing a protocol becomes an exercise in atomically applying metadata updates across a distributed storage system.
+This mindset leads us to consider an approach to specifying coherence protocols based on transactions,
+and factoring out the expression of the transactions from their content and implementation.
 
 In the previous chapter, I presented TileLink,
 a protocol framework designed to be a substrate for cache coherence transactions that implement a particular cache coherence policy. 
@@ -52,14 +60,14 @@ while the underlying TileLink substrate ensures forward progress of global proto
 
 \section{Background} 
 
-Designing new cache coherence protocols or supporting a wider variety of more complicated protocols is not a task hardware engineers can undertake lightly.
+Designing new cache coherence protocols or supporting a wider variety of more complicated protocols is not a task hardware engineers should underestimate.
 Verifying the correctness of a cache coherence protocol is a challenging task, and
 verifying that a correct protocol has been implemented correctly (using simulations or silicon) is even more difficult
 \cite{deorio2008post, bentley2001validating, burckhardt2005verifying, clarke1995verification, dill1992protocol, wood1990verifying}.
 Traditionally, protocol correctness is verified using an abstracted version of the distributed system of caches upon which the protocol operates
 \cite{talupur2008going, delzanno2003constraint, pong1997verification, wood1990verifying, mcmillan2001parameterized}.
 The abstraction employed at this stage makes the verification process tractable by eliding many details of the underlying modules' implementations.
-Upon verification of protocol correctness, hardware designers must then use a hardware description language (HDL) to write cache controller logic that correctly implements the protocol.
+Upon verification of protocol correctness, hardware designers must then use a HDL to write cache controller logic that correctly implements the protocol.
 Unfortuntately, the semantic gap between high-level abstract descriptions of protocols and 
 concrete HDL implementations of those same protocols is so wide that verifying the correctness of the protocol
 does not come close to guaranteeing the correctness of the final implementation \cite{dave-memocode05}.
@@ -86,7 +94,7 @@ a handler into atomically executable pieces and sequence them.
 Teapot outputs C code for distributed memory implementations and $Mur\phi$ models for verification.
 
 Bluespec SystemVerilog (BSV) \cite{bluespec}
-is an HDL that produces synthesizeable hardware implementations based on an absraction called guarded atomic actions (GAAs).
+is an HDL that produces synthesizeable hardware implementations based on an absraction called \emph{guarded atomic actions} (GAAs).
 BSV has been proposed a a particularly suitable language for describing distributed cache coherence controllers \cite{dave-memocode05}.
 GAAs consist of a guard (boolean logic predicate), and an action (some kind of state update)
 that is executed atomically by the hardware control logic when the predicate evaluates to true.
@@ -118,10 +126,10 @@ our meta-HDL/DSL embedded in Scala.
 So far we have discussed prior art in how to implement protocols,
 but we should also review what protocols to consider implementing.
 Heterogeneity in memory access behavior as been a major focus of study for distributed shared memory systems.
-Memory access patterns can general be grouped at a high level into a few common sharing patterns, such as read-modify-write, producer-consumer, and migratory. Systems that support adaptive cache coherence protocols allow the behavior of the protocol to change with detected changes in program behavior.  Examples of such adaptive protocols in the distributed memory space include \cite{amza-hpca97,lebeck-archnews95,stenstrom-isca93,cox-isca93}. Note that these designs have a single protocol, but one that varies its behavior dynamically.
-In particular, we used~\cite{stenstrom-isca93,cox-isca93} as inspiration for the migratory policy provided in our Rocket Chip Generator~\cite{rocket}.
+Memory access patterns can general be grouped at a high level into a few common sharing patterns, such as read-modify-write, producer-consumer, and migratory. Systems that support adaptive cache coherence protocols allow the behavior of the protocol to change with detected changes in program behavior.  There are many examples of such adaptive protocols in the distributed memory space include \cite{amza-hpca97,lebeck-archnews95,stenstrom-isca93,cox-isca93}. Note that these designs have a single protocol, but one that varies its behavior dynamically.
+In particular, we used two~\cite{stenstrom-isca93,cox-isca93} as inspiration for the migratory policy provided in our Rocket Chip Generator~\cite{rocket}.
 
-In the shared memory space, designs like FLASH \cite{kuskin-archnews94} have incorporated multiple protocols on top of a single hardware substrate in order to provide adaptability. Generally transitions between protocols have been triggered by heuristic mechanisms \cite{mukherjee-archnews98}. Others \cite{chandra-sigplan96,falsafi-sc94} have proposed creating application-specific protocols that are tailored to match a particular application's needs.
+In the shared memory space, designs like FLASH \cite{kuskin-archnews94} have incorporated multiple protocols on top of a single hardware substrate in order to provide adaptability. Generally, transitions between protocols have been triggered by heuristic mechanisms \cite{mukherjee-archnews98}. Others \cite{chandra-sigplan96,falsafi-sc94} have proposed creating application-specific protocols that are tailored to match a particular application's needs.
 These efforts indicate that multiple protocols can share the same underlying communication framework and memory system,
 which served as an inspiration for the TileLink/CoherencePolicy separation of interests described in this chapter and the previous.
 
@@ -144,11 +152,38 @@ and receiving of TileLink messages.
 Thus, TileLink is a framework that describes the shapes of a set of possible flows,
 and these outlines can be filled in to create more concrete specifications of protocol behavior.
 
+\begin{figure}
+\centering
+\includegraphics[width=0.8\columnwidth]{coherence/figures/rel-flow.pdf}
+\caption[A volunary writback flow.]{
+A voluntary writeback message flow in a single realm.
+}
+\label{fig:rel-flow}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics[width=0.8\columnwidth]{coherence/figures/acq-flow.pdf}
+\caption[A processor store flow.]{
+A processor store flow in a single realm, which must probe other clients in the realm.
+}
+\label{fig:acq-flow}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics[width=0.8\columnwidth]{coherence/figures/outer-acq-flow.pdf}
+\caption[A processor store flow.]{
+A processor load flow in a single realm, which must make a request to outer memory.
+}
+\label{fig:outer-acq-flow}
+\end{figure}
+
 The simplest flows are linear ordering of events, usually involving two agents.
 Each entry in the flow is either a simple event, 
 corresponding to a single protocol update being committed,
-or a sub-flow recursively composed of simple events.
-Figure~\ref{} shows a simple flow based around a voluntary writeback of dirty data from a client cache,
+or a \emph{sub-flow}. recursively composed of simple events.
+Figure~\ref{fig:rel-flow} shows a simple flow based around a voluntary writeback of dirty data from a client cache,
 using a TileLink Release/Grant transaction.
 
 The notion of sub-flow allows us to
@@ -159,8 +194,9 @@ or might have more than one succeeding event
 Flows may only express a partial order of events and not a total order.
 For all of the above reasons, O'Leary et al. proposed that it is best to represent flows as Directed Acyclic Graphs (DAGs)
 \cite{oleary-fmcad09}.
-Figure~\ref{} shows a more complicated flow based around acquiring write permissions on a block that is currently being
+Figure~\ref{fig:acq-flow} shows a more complicated flow based around acquiring write permissions on a block that is currently being
 shared by multiple clients, again using a 5-step TileLink transaction.
+Figure~\ref{fig:outer-acq-flow} shows another alternative flow based around acquiring read permissions on a block that the manager does not posses a copy of, forcing it to forward the query to an outer realm.
 
 An important part of verifying protocols using flows is to specify rules that govern non-interference between flows,
 i.e., which flows are allowed to execute in the system at the same time.
@@ -183,14 +219,13 @@ we will have furnished ourselves with a controller that is correctly implements 
 possible global flows.
 This top-down approach to controller design is central to the productivity of our approach.
 
-In this section we present an algorithm for turning a collection of flows into multiple collections of localized sub-flows.
+In this section, we present an algorithm for turning a collection of flows into multiple collections of localized sub-flows.
 First, we express the flows as DAGs in Scala, where vertices are events or actions and edges are happens-before dependencies between them.
 Next, we walk each DAG looking for components that are separable sub-graphs of events that all occur at the same agent.
 We can sever the graph around these points, leaving us with input vertices that represent receiving a message of a particular type.
 These input nodes are the events that kick off local sub-transactions.
 Conversely, these mini-DAGs may also contain nodes that require sending a message to another agent or agents.
-Figure~\ref{} illustrates an example decomposition using the three flows from the previous section.
-Figure~\ref{fig:decomp} presents the algorithm for flow decomposition.
+Figure~\ref{fig:decomp-alg} presents the algorithm for flow decomposition.
 
 \begin{figure}
 \centering
@@ -242,24 +277,38 @@ def getSubFlows(prot: Protocol, loc: Location): Seq[Flow] = {
 \caption{
 An algorithm for decomposing a set of global flows into local sub-flows.
 }
-\label{fig:decomp}
+\label{fig:decomp-alg}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics[width=1\columnwidth]{coherence/figures/decoupled.pdf}
+\caption[Decomposing sub-flows based on location.]{
+We can decompose flows into sub-flows, and collect sub-flows that occur within the same agent.
+}
+\label{fig:decomp-flow}
 \end{figure}
 
 Once we have partitioned all the global flow DAGs into smaller DAGs representing local sub-flows,
 it is trivial to collect the set of sub-flows that correspond with a particular agent type.
-This per-type set of sub-flows then forms the basis of the operations that we will expect this agent to be able to perform atomically.
-In the next section we discuss how to turn any of these collections of localized sub-flows into a cache or directory controller.
+Figure~\ref{fig:decomp-flow} illustrates an example decomposition using the three flows from the previous section.
+Each sub-flow begins and ends with some kind of messaging event.
+Note how some of the sub-flows were duplicated across the original flows and have been deduplicated here;
+this deduplication is the basis of some significant opportunities for code reuse.
+
+The per-agent-type subset of sub-flows then forms the basis of the operations that we will expect this agent to be able to perform atomically.
+In the next section, we discuss how to turn any of these collections of localized sub-flows into a cache or directory controller.
 
 \subsection{Implementing Local Sub-Flows and Their Dependencies}
 
-Taking a collection of sub-flows that must be implemented by the particular agent we are designing,
+Given a collection of sub-flows that must be implemented by the particular agent we are designing,
 our task is now to implement the control logic that allows those sub-flows to operate atomically.
 Ideally, we would be able to perform this transformation automatically, 
 but for now some hand-coding is still required in our Rocket Chip Genereatorr~\cite{rocket}.
 However, we are able to use Scala to create very concise descriptions of sub-flow behaviors,
 which are easily composed together to create complete cache controllers.
 
-Part of our strategy is to create Transaction Status Handling Registers (TSHRs).
+Part of our strategy is to create \emph{Transaction Status Handling Registers} (TSHRs).
 These modules contain all the state needed to track the progress of 
 one type of sub-flow, with some handlers capable of merging multiple sub-flows.
 We provide a way to execute the actions themselves, as well as to implement the dependencies between actions for each flow.
@@ -275,39 +324,185 @@ Each trait consists of functions that actually update state or send a message,
 and bits that are added to a ``scoreboard''~\ref{thornton1964scoreboard} that tracks the progress of concurrent sub-flows.
 As execution of the sub-flow progresses, additional actions are performed once their dependencies are satisfied.
 
-Dependencies among sub-flows from different traits are expressed inside of the trackers themselves,
+Dependencies among sub-flows from different traits are expressed inside of the TSHRs themselves,
 by referencing the pending bits and providing an additional layer of inter-flow dependencies.
 Trackers also contain code to implement the global rules restricting what flows are allowed to execute at the same time.
-This is the portion of the system that we could,
+This step is the portion of the system that we could,
 but do not yet, derive automatically from the global flows.
 However, we have found that expressing the dependencies via sub-flow pending bits is conscise and much easier to reason about than
 constructing interacting state machines to handle each sub-flow. 
 
+\begin{figure}
+\centering
+\begin{scala}
+trait AcceptsVoluntaryReleases extends HasVoluntaryReleaseMetadataBuffer {
+  lazy val pending_irel_data = Reg(init=Bits(0, width = innerDataBeats))
+  lazy val pending_vol_ignt = connectTwoWayBeatCounter(up = io.inner.release, down = io.inner.grant)
+
+  def irel_can_merge: Bool
+  def irel_same_xact: Bool
+  def irel_is_accepted: Bool = io.inner.release.fire() &&
+                                 (io.alloc.irel || irel_can_merge || irel_same_xact)
+  def irel_is_allocating: Bool = state === s_idle && io.inner.release.valid && io.alloc.irel
+
+  def innerRelease(block_vol_ignt: Bool = Bool(false), next: UInt = s_busy) {
+    pending_irel_data := (pending_irel_data & dropPendingBitWhenBeatHasData(io.inner.release))
+    
+    when(irel_is_allocating) {
+      xact_addr_block := io.irel().addr_block
+      state := next
+    }
+    
+    when(io.inner.release.fire()) {
+      when(io.alloc.irel || (irel_can_merge && io.irel().first())) {
+        xact_vol_irel := io.irel()
+        pending_irel_data := Mux(io.irel().hasMultibeatData(),
+                                dropPendingBitWhenBeatHasData(io.inner.release),
+                                UInt(0))
+      }
+    }
+    
+    io.inner.grant.valid := (state === s_busy || state === s_inner_probe) &&
+                              pending_vol_ignt &&
+                              !(pending_irel_data.orR || block_vol_ignt)
+    
+    io.inner.grant.bits := inner_coh.makeGrant(xact_vol_irel)
+    
+    scoreboard += (pending_irel_data.orR, pending_vol_ignt)
+  }
+}
+
+\end{scala} 
+\caption[The AcceptsVoluntaryReleases trait.]{
+The \code{AcceptsVoluntaryReleases} trait contains the \code{innerRelease} function that generates the logic associated with this sub-flow,
+which accepts Releases from clients and issues acknowledging Grants.
+}
+\label{fig:volreltrait}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{scala}
+trait EmitsInnerProbes extends HasBlockAddressBuffer
+    with HasXactTrackerStates
+    with HasPendingBitHelpers {
+  def io: HierarchicalXactTrackerIO
+
+  val pending_iprbs = Reg(UInt(width = innerNCachingClients))
+  val curr_probe_dst = PriorityEncoder(pending_iprbs)
+
+  lazy val pending_irels = connectTwoWayBeatCounter(up = io.inner.probe, down = io.inner.release)
+
+  def full_representation: UInt
+  def initializeProbes() { pending_iprbs := full_representation & ~io.incoherent.toBits }
+  def irel_same_xact = io.irel().conflicts(xact_addr_block) &&
+                         !io.irel().isVoluntary() &&
+                         state === s_inner_probe
+                         
+  def innerProbe(prb: Probe, next: UInt) {
+    pending_iprbs := pending_iprbs & dropPendingBitAtDest(io.inner.probe)
+    io.inner.probe.valid := state === s_inner_probe && pending_iprbs.orR
+    io.inner.probe.bits := prb
+
+    when(state === s_inner_probe && !(pending_iprbs.orR || pending_irels)) {
+      state := next
+    } 
+    
+     scoreboard += (pending_iprbs.orR, pending_irels)
+  } 
+} 
+
+\end{scala} 
+\caption[The EmitsInnerProbes trait.]{
+The \code{EmitsInnerProbes} trait defines the \code{innerProbe} method that generates the logic associated with this sub-flow,
+which sends Probes to clients and awaits acknowledging Releases.
+}
+\label{fig:probetrait}
+\end{figure}
+
 We now show examples of some examples of traits containing methods that generate logic implementing sub-flow actions.
-Figure~\ref{} shows the \code{AcceptsVoluntaryReleases} trait, which accepts voluntary writebacks from clients,
+Figure~\ref{fig:volreltrait} shows the \code{AcceptsVoluntaryReleases} trait, which accepts voluntary writebacks from clients,
 writes the data to some kind of backing storage (which may be local or require further messaging),
 and then acknowledges the writeback with a Grant message to the original client.
 Note that this trait provides an output hook for ensuring that the intial Release is completed
 and an input hook for ensuring that the writeback has been committed to some kind of backing memory.
-Figure~\ref{} shows the \code{EmitsInnerProbes} trait, which send Probes to clients in order to prompt them to Release permissions on a cache block.
+Figure~\ref{fig:probetrait} shows the \code{EmitsInnerProbes} trait, which send Probes to clients in order to prompt them to Release permissions on a cache block.
 The tracker must wait until an appropriate number of Release acknowledgements or writebacks have been collected before advancing
 to the next stage, and this trait provides an output hook to do so.
 The two traits are composable, in that a particular tracker generator can mix-in both so as to handle Release associated with
 both voluntary writebacks and probe responses.
 
+\begin{figure}
+\centering
+\begin{scala}
+class CacheVoluntaryReleaseTracker(trackerId: Int)(implicit p: Parameters)
+    extends VoluntaryReleaseTracker(trackerId)(p)
+    with HasDataBuffer
+    with WritesToOuterCacheDataArray {
+  val io = new L2XactTrackerIO
+
+  // Avoid metatdata races with writebacks
+  routeInParent(iacqMatches = inSameSet(_, xact_addr_block))
+
+  // Initialize and accept pending Release beats
+  innerRelease(
+    block_vol_ignt = pending_writes.orR,
+    next = s_meta_read)
+
+  io.inner.release.ready := state === s_idle || irel_can_merge || irel_same_xact
+
+  // Begin a transaction by getting the current block metadata
+  metaRead(io.meta, s_busy)
+
+  // Write the voluntarily written back data to this cache
+  writeDataArray(add_pending_bit = addPendingBitWhenBeatHasData(io.inner.release))
+
+  // Wait for any pending sub-flows
+  quiesce(s_meta_write)
+
+  // End a transaction by updating the block metadata
+  val new_meta = 
+    L2Metadata(
+      tag = xact_addr_tag,
+      inner = xact_old_meta.coh.inner.onRelease(xact_vol_irel),
+      outer = Mux(xact_vol_irel.hasData(),
+                  xact_old_meta.coh.outer.onHit(M_XWR),
+                  xact_old_meta.coh.outer)),
+  metaWrite(io.meta, new_meta, s_idle)       
+}
+\end{scala} 
+\caption[The CacheVoluntaryReleaseTracker.]{
+The CacheVoluntaryReleaseTracker is intialized upon receiving a voluntary writeback Release.
+It reads the current state of the block from the metadata array, writes backs the new dirty data,
+and updates the metadata array.
+}
+\label{fig:volreltracker}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{scala}
+
+\end{scala} 
+\caption[The BroadcastAcquireTracker.]{
+The BroadcastAcquireTracker.
+}
+\label{fig:acqtracker}
+\end{figure}
+
 Trackers are composed of these traits, and additionally consist of logic to manage dependencies among the sub-flows.
 They do this by referencing names bits in the scoreboard logic.
-Figure~\ref{} outlines \code{CacheVoluntaryReleaseTracker}, a tracker that combines the
+Figure~\ref{fig:volreltracker} outlines \code{CacheVoluntaryReleaseTracker}, a tracker that combines the
 \code{WritesToOuterCacheDataArray}, \code{AcceptsVoluntaryReleases}, and \code{HasDataBuffer} traits.
 This tracker guarantees forward progress in a hierarchical cache by always being available to sink voluntary writebacks.
-Figure~\ref{} summarizes \code{BroadcastAcquireTracker}, a tracker that combines the
+Figure~\ref{fig:acqtracker} summarizes \code{BroadcastAcquireTracker}, a tracker that combines the
 \code{BroadcastsToAllClients}, \code{AcceptsVoluntaryReleases}, 
 \code{EmitsVoluntaryReleases}, \code{AcceptsInnerAcquires}, \code{EmitsInnerProbes}, \code{EmitsOuterAcquires},
 and \code{HasDataBuffer} traits.
 This tracker is used in conjuction with in a broadcast-based messaging medium to handle Acquire transactions,
 and is an example of combining two traits that use the same messaging channel.
 
-These traits and trackers, which are derived from commom sub-flows and from global flows respectively,
+These traits and TSHRs, which are derived from commom sub-flows and from global flows respectively,
 demonstrate how we are able to transform high-level descriptions of protocol behavior into HDL descriptions
 that produce syntehsizeable hardware.
 The scoreboard logic they produce and compose manages concurrency and atomicity within the agent.
@@ -318,7 +513,7 @@ This policy-centric abstraction is the focus of the next section.
 \section{Object-Oriented Coherence Policies}
 
 As in the previous chapter, we distinguish between coherence policies and coherence protocols.
-A coherence {\em policy} governs how the SWMR invariant is represented as metadata identifying available permissions on data blocks.
+A coherence {\em policy} governs how the Single-Writer-Multiple-Reader invariant is represented as metadata identifying available permissions on data blocks.
 A coherence {\em protocol} specifies the exact flows of messages and actions that must be propagated through the memory hierarchy in order to effect a policy.
 While decomposing flows into sub-flow traits has proven to be an effective strategy for managaing concurrency and complexity in cache controller design,
 this approach does not address how different coherence policies are represented within the flows.
@@ -326,7 +521,7 @@ For example, what do the state update functions actually store in the metadata a
 How are the specific messages required to be sent between agents actually created?
 These are questions are a matter of policy.
 
-In this section we present an interface that allows protocol designers to cleanly answer these questions,
+In this section, we present an interface that allows protocol designers to cleanly answer these questions.
 Our goal in introducing this abstract interface is to hold some parts of the controller design constant,
 swapping out only the elements of controllers that differ across different policies.
 To this end, we have created a unified \emph{CoherencePolicy} interface
@@ -339,7 +534,7 @@ based around an abstraction of coherence policy metadata.
 These objects are opaque sets of bits which are evaluated and mutated by the coherence policy.
 In the object-oriented programming (OOP) paradigm, ``objects'' are abstractions that contain \emph{fields} of data that are mutated and accessed by procedural \emph{methods}.
 In OOP, computer programs are designed by making them out of objects that interact with one another.
-In our case, we are forming critical portions of the cache controller logic by interacting with object representing
+In our case, we are forming critical portions of the cache controller logic by interacting with objects representing
 the metadata about cache block permissions that is stored in local memories.
 
 One advantage of deploying this particular abstraction is that
@@ -362,7 +557,7 @@ one for agents that act as clients and one for agents that act as managers.
 apply incoming memory operations to a particular block of cached data.
 They may also store protocol-specific information about the block, such as whether or not it has been dirtied by a write.
 \emph{ManagerMetadata} store information about how the block has propagated through the clients for which this manager is responsible.
-This might include some representation of the number of client sharers, or patterns of movement observed on that block.
+This information might include some representation of the number of client sharers, or patterns of movement observed on that block.
 Any agent with access to a particular type of metadata is capable of utilizing the methods
 available on that metadata inside of its sub-flow transactions,
 and particular agents can store and utilize either or both types.
@@ -385,7 +580,7 @@ a cache block have been propagated among a manager's clients.
 A ClientMetadata object consists of a set of bits that represent the ``state'' of a certain cache block,
 i.e., the permissions that the policy has made available on that block inside this particular client cache controller.
 The metadata may also store other information about the cache block,
-for example whether it has been dirtied by a store operation.
+for example, whether it has been dirtied by a store operation.
 There are three types of method calls that a cache controller can make against ClientMetadata objects:
 permissions checks, message creation, and metadata updates.
 Permissions are expressed with respect to memory operations, which we define in Appendix~\ref{a.memopcodes}.
@@ -621,12 +816,21 @@ TileLink channel bundles that are the outputs of many of the inteface's methods.
 \section{Parameterization and Coherence Policies}
 
 In this section we will discuss the interplay between Context-Dependent Environments (CDEs),
-which we introduced in Chapter~\ref{c.cde},
+which we introduced in Chapter~\ref{c.parameters},
 and the CoherencePolicy and Metadata objects.
 CoherencePolicy objects are parameterized by the DirectoryRepresentation that they use.
 More complicated policies could potentially be additionally parameterized in order to tune their heuristic behavior.
 Metadata objects are parameterized by the TileLinkParameters objects of the TileLink network with which they are associated.
 Figure~\ref{fig:cdepolicy} illustrates these relationships.
+
+\begin{figure}[t!]
+\centering
+%\includegraphics[width=1\columnwidth]{coherence/figures/cdepolicy.pdf}
+\caption[Parameterizing Coherence Policies.]{
+Parameterizing Coherence Policies.
+}
+\label{fig:cdepolicy}
+\end{figure}
 
 We include a CoherencePolicy as a member of the TileLinkParameter case class that stores all the information
 about channel widths associated with a particular TileLink realm (see Chapter~\ref{s.tlparam}).
@@ -748,25 +952,25 @@ All the controller implementations can be combined with any policy,
 as well as a TileLink-compatible Network-on-Chip (NoC),
 in order to make a complete protocol fabric.
 
-Performance measurements, holding design parameters constant (other than core count?).
-Figure~\ref{} shows MI vs MEI for read-only data.
-Figure~\ref{} shows MI/MEI vs MSI/MESI for shared data.
-Figure~\ref{} shows MESI vs Migratory for migratory data.
+The interoperability and abstracts deployed in our memory hierarchy generator allow
+the XX lines of Chisel code we use to express the local transactions 
+to be reused across the three manager agent implementations.
+At the same time,
+the YY lines of code used to express each policy share ZZ lines of common policy decision-making logic.
+Overall the entire memory generator, include cache storage arrays, networks and converters,
+are expressed in less than AA lines of Chisel code.
+
+%Performance measurements, holding design parameters constant (other than core count?).
+%Figure~\ref{} shows MI vs MEI for read-only data.
+%Figure~\ref{} shows MI/MEI vs MSI/MESI for shared data.
+%Figure~\ref{} shows MESI vs Migratory for migratory data.
 
 \section{Discussion}
 
-This chapter has introduced a set of abstractions and interfaces that make it more productive to write extensible
-coherence protocols.
-``The essence of abstractions is preserving information that is relevant in a given context, and forgetting information that is irrelevant in that context''~\ref{guttag2014introduction}.
+``The essence of abstractions is preserving information that is relevant in a given context, and forgetting information that is irrelevant in that context''~\cite{guttag2014introduction}.
+This chapter has introduced a set of abstractions and interfaces that make it more productive to write extensible coherence protocols.
 In that spirit, in this section I attempt to distill the relationships between our various protocol abstractions and highlight which information they encapsulate and expose.
 
-A coherence protocol specifies the exact sequences of messages that must be propagated through the memory hierarchy in order to service memory operations,
-while preserving the Single-Writer-Multiple-Reader invariant throughout a logical epoch.
-Preserving this invariant implies that system creates a global total ordering of reads and write to any given memory location.
-Because metadata related to the permissions available on each cache block are distributed throughout the cache hierarchy,
-implementing a protocol becomes an exercise in atomically applying metadata updates across a distributed storage system.
-This mindset leads us to consider an approach to specifying coherence protocols based on transactions,
-and factoring out the expression of the transactions from their content and implementation.
 
 In our paradigm, a protocol consists of many transactional message flows.
 Flows may share common sub-flows, which can be codified as local transactions on state
@@ -774,7 +978,16 @@ and then mixed together to form controller logic,
 with dependencies among sub-flows being inferred from the global flows.
 Flows are shaped by and utilize our metadata objects (to define policy-based permissions)
 and TileLink substrate (for deadlock-free ordering).
-Figure~\ref{} highlights the interplay between message flows, coherence metadata objects, and TileLink.
+Figure~\ref{fig:overview} highlights the interplay between message flows, coherence metadata objects, and TileLink.
+
+\begin{figure}[t!]
+\centering
+%\includegraphics[width=1\columnwidth]{coherence/figures/overview.pdf}
+\caption[Separation of Concerns.]{
+The separation of concerns between message flows, coherence metadata objects, and the TileLink framework.
+}
+\label{fig:overview}
+\end{figure}
 
 Coherence metadata objects abstract the policy decisions inherent to the protocol.
 Queries made against coherence metadata objects act to determine which flow or sub-flow is occuring.
@@ -806,7 +1019,7 @@ to be changed without requiring changes to the policy description or network imp
 
 Taken together, we can see how the tradeoffs in information available within each abstraction
 help to make protocol design more productive and tractable.
-By eliding information about timing from policy decisions, policy designers only have to consider
+By separating information about timing from policy decisions, policy designers only have to consider
 current state and desired operation, yet know what general type of message need be produced.
 By eliding information about policy from the networking substrate, NoC designers know what priority channels to provision, without focusing on the details of any one policy.
 Agent control logic implementations use both abstractions to simplify their code density and increase code reuse, and
@@ -821,7 +1034,7 @@ and proactively managing data placement policies accordingly, similar to
 the Migratory policy whose features we discussed in a previous section of this chapter.
 Alternatively, we might want to enable hooks to allow for software control of coherence states,
 possibly via further memory opcodes targetting individual cache blocks and triggering new transaction flows.
-This approach could also involve integration with other software-based data placement strategies, such as VLS~\cite{VLS}.
+This approach could also involve integration with other software-based data placement strategies, such as VLS~\cite{Cook:EECS-2009-131}.
 Appendix~\ref{a.swmem} provides an overview of related work in this area.
 
 Past designs for adaptively coherent shared memory systems, such as Standford FLASH \cite{kuskin-archnews94}, 

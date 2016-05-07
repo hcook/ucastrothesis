@@ -118,7 +118,7 @@ building blocks that can be readily compared, tested and evaluated \cite{beu2011
 Nested coherence realms in the MCP paradigm. 
 The innermost realm consists of client agents and their manager, which may in
 turn be the client of a second tier manager in an outer realm, and so on.
-TODO }
+Hierarchical agents act as both inward managers and outward clients. }
 \label{fig:mcp}
 \end{figure}
 
@@ -133,7 +133,7 @@ that cause certain agents to gain or lose permissions to access copies of cached
 
 TileLink is a hierarchical protocol, wherein a Manager-Client Pairing (MCP) methodology encapsulates the complexity of supporting
 multiple levels of protocol within a single memory hierarchy~\cite{beu2011manager}.
-Within any one level of the memory hierarchy, TileLink is based off of a symmetric, four-hop transaction structure (Figure~\ref{fig:hops}.A).
+Within any one level of the memory hierarchy, TileLink is based off of a symmetric, four-hop transaction structure (Figure~\ref{fig:hops}.C).
 Manager agents serve as a point of serialization for coherence transactions on a block occuring within their coherence realm.
 All messages sent to clients are eventually acknowledged, which allows the manager to ensure that all clients have
 individually serialized transactions on a particular cache block in the same order.
@@ -302,7 +302,7 @@ or target different sub-block addresses (for ``uncached'' transactions). See Sec
 \begin{figure}[p]
 \centering
 \includegraphics[width=0.5\columnwidth]{tilelink/figures/ordered.pdf}
-\caption[Interleaved message flows  anager blocking Acquires from multiple sources.]{
+\caption[Interleaved but well-ordered message flows.]{
 Interleaved message flows demonstrating a manager blocking Acquires from multiple sources.
 Clients A and B send an Acquire to a Manager, with Client B winning the race.
 The manager blocks Client A's transaction from making forward progress.
@@ -316,7 +316,7 @@ Once Client B responds with a Finish, Client A's transaction can proceed as norm
 \begin{figure}[!p]
 \centering
 \includegraphics[width=0.5\columnwidth]{tilelink/figures/unordered.pdf}
-\caption[Interleaved message flows demonstrating the need for Finishes to serialize Grant ordering.]{
+\caption[Interleaved and disordered message flows.]{
 Interleaved message flows demonstrating the need for Finishes to serialize Grant ordering.
 Client A sends an Acquire to a manager, which in turn Probes Client B to Release dirty data.
 This dirty data is forwarded by the manager in the form of a Grant to the transaction source, Client A.
@@ -335,7 +335,7 @@ Thus, from the perspective of Client A, the write to the block performed by Clie
 \begin{figure}[!p]
 \centering
 \includegraphics[width=0.5\columnwidth]{tilelink/figures/rel-merge.pdf}
-\caption[Interleaved message flows demonstrating acknowledgment Grants of voluntary writeback Releases.]{
+\caption[Interleaved and well-ordered voluntary writeback message flows.]{
 Interleaved message flows demonstrating acknowledgment Grants of voluntary writeback Releases.
 Client A sends an Acquire to a manager, which then sends a Probe to Client B.
 At the same time, Client B chooses to evict the same block and issues a voluntary Release.
@@ -401,7 +401,7 @@ Further restrictions on issuing multiple Acquires to sub-block addresses via bui
 \begin{figure}[p]
 \centering
 \includegraphics[width=0.8\columnwidth]{tilelink/figures/standard5.pdf}
-\caption[Overview of a multi-level transaction's message flow.]{
+\caption[A multi-level message flow.]{
 Overview of a multi-level transaction's message flow.
 After the hierarchical agent has Probed the clients under its purview, it falls back on initiating a transaction in the outer realm,
 which is serviced by the outermost manager. Other branches of the memory hierarchy are Probed,
@@ -413,7 +413,7 @@ and any Released data is Granted back to the original source Client A by way of 
 \begin{figure}[!p]
 \centering
 \includegraphics[width=0.8\columnwidth]{tilelink/figures/acq-merge-5.pdf}
-\caption[Overview of a multi-level transaction's message flow including an Acquire race.]{
+\caption[A multi-level message flow including an Acquire race.]{
 Overview of a multi-level transaction's message flow including an Acquire race.
 Client A and Client C both issue Acquires. However, Client C's Acquire is the first to reach the outermost Manager, which means
 it happens before Client A's transaction.
@@ -426,7 +426,7 @@ The Grant sent by the Hierarchical agent must take into account the fact that Cl
 \begin{figure}[!p]
 \centering
 \includegraphics[width=0.8\columnwidth]{tilelink/figures/acq-merge-5-2.pdf}
-\caption[Overview of a multi-level transaction's message flow including an Acquire race.]{
+\caption[Another multi-level message flow including an Acquire race.]{
 Overview of a multi-level transaction's message flow including an Acquire race.
 Client A and Client C both issue Acquires.
 Client A's transaction is satisfiable locally, and a Grant is issued for it, which becomes delayed in the network.
@@ -526,7 +526,8 @@ Similarly, a single PutAck is used to respond to a PutBlock message containing m
     PutAtomic & GetDataBeat & Update data in outer memory and return old value. \\ \hline
 \end{tabular}
 \end{center}
-\caption{Overview of built-in, uncached transactions. Each type of Acquire results in a particular acknowledgment or data Grant.}
+\caption[Overview of built-in, uncached transactions.]{
+Overview of built-in, uncached transactions. Each type of Acquire results in a particular acknowledgment or data Grant.}
 \label{tab:uncached}
 \end{table}
 
@@ -652,7 +653,7 @@ union & Union & Used to derive and derive the sub-fields in Table~\ref{tab:union
 \label{tab:acquire}
 \end{table}
 
-\begin{table}[]
+\begin{table}
 \begin{center}
 \begin{tabular}{|l|l|c|c|c|c|l|}
     \hline
@@ -665,7 +666,8 @@ addr\_byte & UInt & X   &     & X      &          & Address of the word within t
 wmask      & UInt &     & X   &        &          & Byte write mask for Put data \\ \hline
 \end{tabular}
 \end{center}
-\caption{Input sub-fields used to fill in the Union field of the Acquire channel for built-in messages.
+\caption[The union field of the Acquire channel.]{
+Input sub-fields used to fill in the Union field of the Acquire channel for built-in messages.
 `X' indicates which  subfields are meaningful for which built-in message types.
 }
 \label{tab:union}
@@ -769,7 +771,7 @@ manager\_xact\_id & UInt & Manager's id for the transaction \\ \hline
 \begin{figure}[p]
 \centering
 \includegraphics[width=1\columnwidth]{tilelink/figures/agent-specific.pdf}
-\caption{Overview of the logic view of the TileLink interface presented to each type of agent.}
+\caption[Agent-specific views of TileLink.]{Overview of the logical view of the TileLink interface presented to each type of agent.}
 \label{fig:agent}
 \end{figure}
 
@@ -819,7 +821,9 @@ TLDataBeats & Int & Number of beats per cache block \\ \hline
 %                      &         & preserved point-to-point ordering of messages \\ \hline
 \end{tabular}
 \end{center}
-\caption{Exposed top-level TileLink independent parameters. These are set for each level of the memory hierarchy.}
+\caption[Independent parameters of TileLink.]{
+Exposed top-level TileLink independent parameters.
+These can be set uniquely for each realm of the memory hierarchy.}
 \label{tab:tlparams}
 \end{table}
 
@@ -858,11 +862,7 @@ case class TileLinkParameters(
 }
 
 case object TLKey extends Field[TileLinkParameters]
-
-/** Identifies the TLId of the inner network in a hierarchical cache controller */
 case object InnerTLId extends Field[String]
-
-/** Identifies the TLId of the outer network in a hierarchical cache controller */
 case object OuterTLId extends Field[String]
 
 trait HasCoherenceAgentParameters {

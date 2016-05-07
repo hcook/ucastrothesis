@@ -205,7 +205,8 @@ Fields of that list (or fields of objects within the list) are the parameters of
 \begin{figure}
 \centering
 \epsfig{file=parameters/figures/tile.pdf, width=2.7in}
-\caption{Organization of nested modules used in our running example.
+\caption[Organization of nested modules used in our running example.]{
+Organization of nested modules used in our running example.
 A Tile contains one Core and multiple Caches.
 A Core may or may not contain an FPU, which may or may not be parameterized.}
 \label{fig:block}
@@ -247,7 +248,8 @@ module Core #(hasFpu)(...):
   if(hasFpu) myFpu = new FPU()(...) ...
 module FPU #()(...): ...
 \end{phdl} 
-\caption{An example module hierarchy containing a tile with a processor core and two caches, parameterized through constructor arguments.}
+\caption[An example module hierarchy.]{
+An example module hierarchy containing a tile with a processor core and two caches, parameterized through constructor arguments.}
 \label{fig:arglist}
 \end{figure}
 
@@ -270,7 +272,7 @@ module Core #(hasFpu,(*@\textcolor[rgb]{1,0,0}{fpuLat}@*))(...) :               
   if(hasFpu) myFpu = new (*@\textcolor[rgb]{1,0,0}{PFPU \#(fpuLat)}@*)(...) ...                 // LC
 module PFPU #(latency)(...): ...     // Add parameter to FPU 
 \end{phdl}
-\caption{Example of the source changes (highlighted in red) that are required to append a new leaf submodule (PFPU) that contains a new parameter.}
+\caption[Modifying the example with argument lists.]{Example of the source changes (highlighted in red) that are required to append a new leaf submodule (PFPU) that contains a new parameter.}
 \label{fig:arglist-delta}
 \end{figure}
 
@@ -327,7 +329,7 @@ module Core #(params)(...):
   if(params.hasFpu) myFpu = new FPU()(...) ...
 module FPU #()(...): ...
 \end{phdl} 
-\caption{The same example module hierarchy, but parameterized through flat structs instead of argument lists.}
+\caption[Parameterizing the example with flat structs.]{The same example module hierarchy, but parameterized through flat structs instead of argument lists.}
 \label{fig:flatstruct}
 \end{figure}
 
@@ -350,7 +352,8 @@ module Core #(params)(...) :                                     // No NLC
   if(params.hasFpu) myFpu = new (*@\textcolor[rgb]{1,0,0}{PFPU \#(params.fpuLat)}@*)(...) ...   // LC
 module PFPU #(latency)(...): ...     // Add parameter to FPU 
 \end{phdl} 
-\caption{Example of the source changes (highlighted in red) that are required to append a new leaf submodule (PFPU) that contains a new parameter,
+\caption[Modifying the example with flat structs.]{
+Example of the source changes (highlighted in red) that are required to append a new leaf submodule (PFPU) that contains a new parameter,
 under the flat-struct paradigm.}
 \label{fig:flatstruct-delta}
 \end{figure}
@@ -409,7 +412,7 @@ module Core #(params)(...):                                     // No NLC
   if(params.hasFpu) myFpu = new (*@\textcolor[rgb]{1,0,0}{PFPU \#(params.fpuLat)}@*)(...) ...   // LC
 module PFPU #(latency)(...): ...     // Add parameter to FPU 
 \end{phdl} 
-\caption{Example of the source changes (highlighted in red) that are required to append a new leaf submodule (PFPU) that contains a new parameter,
+\caption[Modifying the example with nested structs.]{Example of the source changes (highlighted in red) that are required to append a new leaf submodule (PFPU) that contains a new parameter,
 under the nested-struct paradigm.}
 \label{fig:nestedstruct-append}
 \end{figure}
@@ -434,7 +437,8 @@ module CacheWithPF #(params)(...):  // New module that adds prefetch functionali
   myCache = new Cache #(params.size)(...)
 ... // Cache, Core, FPU declarations are unchanged
 \end{phdl} 
-\caption{Example of the source changes (highlighted in red) that are required to insert a new interstitial submodule (CacheWithPF) that contains a new parameter,
+\caption[Inserting a new module with nested structs.]{
+Example of the source changes (highlighted in red) that are required to insert a new interstitial submodule (CacheWithPF) that contains a new parameter,
 under the nested-struct paradigm.}
 \label{fig:nestedstruct-insert}
 \end{figure}
@@ -547,7 +551,8 @@ module Cache #(size)(...) : ...
 module Core  #(params)(...) :
   if(params('hasFpu') myFPU = new FPU #()(...) ... // Parameter lookup
 \end{phdl} 
-\caption{The same example module hierarchy, but parameterized through dynamic environments.}
+\caption[Parameterizing the example through dynamic environments.]{
+The same example module hierarchy, but parameterized through dynamic environments.}
 \label{fig:env}
 \end{figure}
 
@@ -570,7 +575,8 @@ module Core #(params)(...) :
    if(params('hasFpu') myFPU = new (*@\textcolor[rgb]{0,0,1}{PFPU \#(params('fpuLat'))}@*)(...) // LC for PFPU
 ... // Cache, PFPU module declarations are unchanged
 \end{phdl} 
-\caption{Simultaneously appending a new submodule that contains a new parameter (highlighted in blue), while also inserting
+\caption[Modifying the example with dynamic environments.]{
+Simultaneously appending a new submodule that contains a new parameter (highlighted in blue), while also inserting
 a new interstitial module that contains a new parameter (highlighted in red). Dynamic environments eliminate NLCs.}
 \label{fig:env-delta}
 \end{figure}
@@ -683,7 +689,7 @@ module Cache #(params)(...):
 module Core #(params)(...):
   if(params('hasFpu') myFpu = new FPU()(...) ...
 \end{phdl} 
-\caption{The same example module hierarchy, but parameterized through context-dependent environments.}
+\caption[Parameterizing the example with CDEs.]{The same example module hierarchy, but parameterized through context-dependent environments.}
 \label{fig:cde}
 \end{figure}
 
@@ -708,7 +714,7 @@ module CacheWithPF (params)(...):
 module Core (params)(...) :
   if(params('hasFpu') myFpu = new (*@\textcolor[rgb]{0,0,1}{PFPU \#(params)}@*)(...) // Core simply passes CDE  // LC
 \end{phdl} 
-\caption{Simultaneously appending a new submodule that contains a new parameter (highlighted in red), while also inserting
+\caption[Modifying the example with CDEs.]{Simultaneously appending a new submodule that contains a new parameter (highlighted in red), while also inserting
 a new interstitial module that contains a new parameter (highlighted in blue). Dynamic environments eliminate NLCs.}
 \label{fig:cde-delta}
 \end{figure}
@@ -786,7 +792,7 @@ We formalize this qualitative assessment in the following section.
 \begin{figure}[p]
 \centering
 \epsfig{file=parameters/figures/both.pdf, width=4in}
-\caption{Appending or inserting a generator to the hierarchy.
+\caption[Appending or inserting a generator to the hierarchy.]{Appending or inserting a generator to the hierarchy.
 Module types are represented as shapes, and the newly inserted or appended modules are red.}
 \label{fig:both}
 \end{figure}
@@ -794,7 +800,7 @@ Module types are represented as shapes, and the newly inserted or appended modul
 \begin{figure}
 \centering
 \epsfig{file=parameters/figures/CDSq2.pdf, width = 6in}
-\caption{(1)-(6) are example module hierarchy modifications. 
+\caption[Example classifications of modifications.]{(1)-(6) are example module hierarchy modifications. 
 Module types are shapes, the newly inserted or appended modules are red, and inter-module parameter references are curved arrows.}
 \label{fig:attr}
 \end{figure}
@@ -852,7 +858,8 @@ regular-env    &  $1+\mu*\theta$ & 0                     & $1+\theta*(1+\mu)$ \\
 CDE            &  $1+\mu$        & 0                     & $1+\theta+\mu$  \\
 \bottomrule
 \end{tabular}
-\caption{Source code change models for appending or inserting a module under any parameterization paradigm.}
+\caption[Models of source code change.]{
+Models of source code change for appending or inserting a module under any parameterization paradigm.}
 \label{tab:limit}
 \end{table}
 
@@ -1188,7 +1195,7 @@ class B(implicit p: Parameters) extends Module {
 
 val b = Module(new B(Parameters.empty.alter(Map("width" -> 16}))))
 \end{scala} 
-\caption{Using Scala's implicit parameters to pass Parameter instances to Modules when no fields are overridden.}
+\caption[Using Scala's implicit parameters.]{Using Scala's implicit parameters to pass Parameter instances to Modules when no fields are overridden.}
 \label{fig:implicit}
 \end{figure}
 
@@ -1314,7 +1321,7 @@ trait HasTileLinkParametersFromStructs {
 }
   
 \end{scala} 
-\caption{
+\caption[Two alternative approaches to representing sub-fields.]{
 Two alternative approaches to representing sub-fields of interrelated parameters.
 In the first example, we use \code{Fields} representing individual parameters, and relate them inside of a \code{trait}.
 In the second example, we use a \code{case class} that wholly encapsulates the parameters and their relationships.

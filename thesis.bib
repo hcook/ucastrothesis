@@ -313,6 +313,17 @@
   publisher={IEEE}
 }
 
+@techreport{Cook:EECS-2009-131,
+    Author = {Cook, Henry and Asanovic, Krste and Patterson, David A.},
+    Title = {Virtual Local Stores: Enabling Software-Managed Memory Hierarchies in Mainstream Computing Environments},
+    Institution = {EECS Department, University of California, Berkeley},
+    Year = {2009},
+    Month = {Sep},
+    URL = {http://www.eecs.berkeley.edu/Pubs/TechRpts/2009/EECS-2009-131.html},
+    Number = {UCB/EECS-2009-131},
+    Abstract = {Software-managed local stores have proven to be more efficient than hardware-managed caches for some important applications, yet their use has been mostly confined to embedded systems that run a small set of applications in a limited runtime environment.  Local stores are problematic in general-purpose systems because they add to process state on context switches, and because they require fast data memory close to the processor that might be better spent on cache for some applications.  We introduce virtualized local stores as a mechanism to provide the benefits of a software-managed memory hierarchy in a general-purpose system. A virtual local store (VLS) is mapped into the virtual address space of a process and backed by physical main memory, but is stored in a partition of the hardware-managed cache when active.  This reduces context switch cost, and allows VLSs to migrate with their process thread.  The partition allocated to the VLS can be rapidly reconfigured without flushing the cache, allowing programmers to selectively use VLS in a library routine with low overhead.}
+}
+
 @inproceedings{jennings1999verischemelog,
   title={Verischemelog: Verilog embedded in scheme},
   author={Jennings, James and Beuscher, Eric},
