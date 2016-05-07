@@ -100,7 +100,10 @@
 \begin{abstract}
 As Moore's Law slows and process scaling yields only small returns, computer architecture and design are poised to undergo a renaissance. This thesis brings the productivity of modern software tools to bear on the design of future energy-efficient hardware architectures. 
 
-In particular, it targets one of the most difficult design tasks in the hardware domain: coherent hierarchies of on-chip caches. I have extended the capabilities of Chisel, a new hardware description language, by providing libraries for hardware developers to use to describe the configuration and behavior of such memory hierarchies, with a focus on the cache coherence protocols that work behind-the-scenes to preserve their abstraction of global shared memory. I discuss how the methods I provide enable productive and extensible memory hierarchy design by separating the concerns of different hierarchy components, and explain how this forms the basis for a generative approach to agile hardware design. 
+In particular, it targets one of the most difficult design tasks in the hardware domain: Coherent hierarchies of on-chip caches.
+I have extended the capabilities of Chisel, a new hardware description language, by providing libraries for hardware developers to use to describe the configuration and behavior of such memory hierarchies, with a focus on the cache coherence protocols that work
+behind the scenes to preserve their abstraction of global shared memory.
+I discuss how the methods I provide enable productive and extensible memory hierarchy design by separating the concerns of different hierarchy components, and I explain how this forms the basis for a generative approach to agile hardware design. 
 
 This thesis describes a general framework for context-dependent parameterization of any hardware generator, defines a specific set of Chisel libraries for generating extensible cache-coherent memory hierarchies, and provides a methodology for decomposing high-level descriptions of cache coherence protocols into controller-localized, object-oriented transactions.
 
@@ -167,9 +170,9 @@ and who pushed me the hardest to deliver on my promises.
 
 I joined Berkeley at a time when the computer architecure group was just coming out of hibernation,
 and its been a privilege and a pleasure to watch it blossom.
-From shivering in the recesses of 420 with Scott Beamer and Sarah Bird;
+I went from shivering in the recesses of 420 with Scott Beamer and Sarah Bird;
 to the sunlight of the Cosmic Cube with Chris Celio, Andrew Waterman and Adam Israelevitz;
-and beyond to all the Barchitects, past and future, thank you for working together to make this happen.
+to all the Barchitects, past and future, thank you for working together to make this happen.
 Andrew Waterman and Yunsup Lee still want to keep working with me.
 Here's to the next big thing.
 
