@@ -1,7 +1,21 @@
-\appendix{Survey of Software-Memory Management Extensions}
+\chapter{Survey of Software-Memory Management Extensions}
 \label{a.swmem}
   
-SW memory management techniques from commercial architectures can be grouped into three high-level categories. The first category is mechanisms dealing with setting the mode and behavior of the underlying hardware data buffers. The second category is mechanisms for specifying the behavior of particular load and store instructions, including prefetches. The third category is mechanisms for modifying the status of data currently in a particular cache. 
+Software memory management techniques allow the programmer to explicitly control
+where copies of data are placed in the memory hierarchy as their program runs.
+While many application programmers favor the productivity gained by relying on hardware caches to manage data placement automatically,
+expert programmers with stringent performance or efficiency demands may prefer to shoulder the burden
+of precisely controlling data placement.
+In this appendix I offer a literature survey of the wide variety of ways that past architectures have allowed programmers to
+manually express where and how data should be put in the memory hierarchy.
+I also offer some proposals for future research directions that add software memory management on top of the memory hierarchy generators
+discussed in this thesis.
+
+\section{Background}
+
+Past offerings from commercial architectures can be grouped into three high-level categories.
+The first category contains mechanisms dealing with setting the mode and behavior of the underlying hardware data buffers.
+The second category is mechanisms for specifying the behavior of particular load and store instructions, including prefetches. The third category is mechanisms for modifying the status of data currently in a particular cache. 
 
 Data buffer management operations are expressed in terms of the actual physical hardware. They include such concrete directives as: deactivate an entire cache, partition some particular ways of some particular cache, change the indexing mode of a cache slice. Once reconfigured by these mechanisms, the data buffer in question behaves differently until a new management directive is supplied.
 
@@ -18,11 +32,11 @@ In the case of concretely-specified mechanisms, the interface for specifying beh
 Mandatory vs. optional is another axis on which software memory management instructions can be classified. The two degrees of enforcement correspond with two distinct goals: those instructions that optimize performance, and those instructions that are necessary for correct functionality.
 This functionality might be data placement, in which case we can contrast optional prefetches with mandatory VLIW explicit placement flags. Or this functionality might be cache coherence, in which case we might contrast instructions that proactively clean dirty data that is known to be needed by remote processors with abstract load flags that prevent data from being refilled into levels of the hierarchy that are not kept coherent by hardware. While it is acceptable for the former types to be treated as optional hints, the later types must be obeyed.
 
-\section{Background}
+\section{Overview}
 
-\begin{landscape}
-\begin{table}[p] 
-\begin{small}
+%\begin{landscape}
+\begin{table}[t] 
+\begin{tiny}
 \begin{tabular}{|l|c|c|c||c|c|c|c||c|c||c|c|c||c|c||c|c|} 
 \hline Feature & 
                {\begin{sideways}Cray-2\end{sideways}} & 
@@ -50,7 +64,7 @@ This functionality might be data placement, in which case we can contrast option
                
                          
  Deactivate entire cache (mode) & & & & & & & & & & & & &\ding{52}& & &\\ \hline
- Allocate capacity to scratchpad (mode) & & & & \ding{52} & \ding{52} & & & & & & & &\ding{52}&\ding{52}&\ding{52}&\\ \hline
+ Allocate capacity to scratchpad (mode) & & & & \ding{52} & \ding{52} & & & & & & & &\ding{52}&\ding{52}&\ding{52}&\ding{52}\\ \hline
  Allocate line of capacity to scratchpad (inst) & & & & & & & & & & & & & &\ding{52}& &\\ \hline \hline
 
  Separate insts for sep mems &  \ding{52}  & & & \ding{52}& & & & & & & & & & & &\\ \hline
@@ -88,51 +102,65 @@ This functionality might be data placement, in which case we can contrast option
    Clean and evict cache range & & & & & & & & & & & & &\ding{52}& & & \\ \hline
    Clean and evict entire cache & & & & & & & & & & & & &\ding{52}& & & \\ \hline
  \end{tabular} 
-\end{small}
+ \end{tiny}
  \caption{Overview of features in past architectures}
+ \label{tab:swmem}
  \end{table}
- \end{landscape}
+% \end{landscape}
 
-\subsection{Vector}
+Table~\ref{tab:swmem} provids an overview of the software memory management features available in a
+broad sampling of past architectures.
+The specific features provided by each architecture are detailed below.
+We group the architectures into the following broad categories: vector instruction sets, SIMD/SIMT
+instruction sets, VLIW instruction sets, various RISC instruction sets, instruction sets for embedded processors,
+and academic research proposals.
+
+\subsection{Vector Machines}
 \subsubsection{Cray-2}
 %http://www.craywiki.com/oldarchive/Manuals/Cray%202%20Computing%20System-%20December%2020,%201982.pdf
 
-Background processors can serve as engines for memory-memory transfers, each with a small local memory for holding operands during the transfer. Local memories used as register files during computation. Separate instructions for accessing local vs. common memory.
+The Cray-2 was a supercomputer with four vector processors built by Cray Research starting in 1985~\cite{cray2-manual, cray2}.
+Background processors can serve as engines for memory-to--memory transfers,
+and each contains a small local memory for holding operands during the transfer.
+Local memories are used as register files during computation.
+Separate instructions are provided for accessing local versus common memory.
 
-\subsubsection{Cray X-1}
+\subsubsection{Cray X1}
 %http://docs.cray.com/books/S-2314-51/html-S-2314-51/S-2314-51-toc.html
 
-Vector memory references can have cache hints, expressed as flags on vector ld/st ops:
+The Cray X1 wass a non-uniform memory access, vector processor supercomputer built by Cray Inc. in 2003~\cite{crayx1}.
+Its vector memory references can have cache hints, expressed as flags on vector load and store operations:
 \begin{itemize}
-\item Data should not allocate space in cache if not present
-\item New allocations should be in shared state
-\item New allocations should be in exclusive state (default)
+\item Data should not allocate space in cache if not present.
+\item New allocations should be in shared state.
+\item New allocations should be in exclusive state (default).
 \end{itemize}
 
 The vrip instruction is used at the end of a sequence of vector instructions to reduce the size of the processor state that must be saved and restored when switching processor contexts, and also to release physical registers in implementations that rename the vector registers.
-
-Scalar memory references include prefetch from from [reg] plus scaled offset or scaled index
-
-Memory ordering flags (G,M,L) can be attached to instructions, interact with barriers.
+Scalar memory references include prefetch from a registered address, plus scaled offset or scaled index.
+Memory ordering flags (G,M,L) can be attached to instructions, and interact with barriers.
 %http://docs.cray.com/books/S-2314-51/html-S-2314-51/x3724.html
 
 \subsubsection{Cray T3D and T3E}
 %ftp://ftp.cray.com/product-info/mpp/T3D_Architecture_Over/T3D.overview.html
 %http://docs.cray.com/books/2178_3.0.1/html-2178_3.0.1/z825105374dep.html
 % TODO: http://ieeexplore.ieee.org/xpls/abs_all.jsp?isNumber=21417&arNumber=993205&isnumber=21417&arnumber=993205&tag=1
-\begin{itemize}
-\item Reads: cacheable read, cacheable atomic swap read, cacheable ``readahread'', non-cacheable, non-cacheable atomic swap. ``Readahead'' buffers data in support circuitry to avoid local DRAM access.
-\item Writes: cacheable write, uncacheable writes
-\item Data prefetch: Transfers from remote memory to prefetch queue in support circuitry, not to cache.
-\end{itemize}
 
-\subsection{SIMD/SIMT}
+The Cray T3D and T3E were two generations of massively parallel supercomputer architectures, both supporting
+global-memory access, prefetch, atomic operations, barriers, and block transfers~\cite{Arpaci:1995:EEC:225830.224443, crayt3d, crayt3e}.
+They support a variety of read operations: cacheable read, cacheable atomic swap read, cacheable ``readahead'', non-cacheable, non-cacheable atomic swap. ``Readahead'' accesses buffer data in support circuitry to avoid local DRAM access.
+Writes may be cacheable or uncacheable.
+Data prefetch operations transfer data from a remote memory to a prefetch queue in the local support circuitry, not to the data cache.
+
+\subsection{SIMD/SIMT Architectures}
 
 \subsubsection{NVIDIA PTX}
 
-PTX ISA version 2.0 introduced optional cache operators on load and store instructions. Note that in \verb=sm_20= implementations L2 is shared by all SMs, but no hardware coherence is provided amongst L1s.
+PTX ISA version 2.0 introduced optional cache operators on load and store instructions~\cite{prx2}.
+Note that in \verb=sm_20= implementations of the architecture, the L2 cache is shared by all cores,
+but no hardware coherence is provided amongst the cores' private L1 caches.
 
-Cache operators/flags for loads:
+PTX provides the following cache operators and flags for loads:
 \begin{itemize}
 \item ``ca'':  Default. Cache at all levels, has temporal locality. Allocates in L1/L2 with normal eviction policy.
 \item ``cg'': Cache only at global level (L2). Data bypasses L1. Existing matching lines in bypassed L1 will be evicted.
@@ -140,7 +168,7 @@ Cache operators/flags for loads:
 \item ``lu'': Last use, implying that the line will not be used again. For local addresses, this prevents unecessary writebacks of spilled registers and stack frames by discarding the line from the L1. For global addresses, this performs a \verb=ld.cs=.
 \end{itemize}
 
-Cache operators/flags for stores:
+PTX provides the following cache operators and flags for stores:
 \begin{itemize}
 \item ``wb'': Default. Cache writeback at all coherent levels. Stores of local data may be cached in L1 or L2, but global data is only cached in L2 since L1s are not kept coherent by hardware. Note that ld.ca's issued by other cores could still hit on stale data.
 \item ``cg'': Cache at global level (L2). Data bypasses L1. Same as \verb=st.wb= for global data, for local data marks L1 lines as evict-first.
@@ -148,19 +176,21 @@ Cache operators/flags for stores:
 \item ``wt'': Cache write-through to system memory. Applies only to global System Memory addresses to allow a CPU program to poll on the location.
 \end{itemize}
 
-Data prefetch is provided by \verb=prefetch= instructions. The level of cache intro which the data should be prefetched is specified explicitly. Prefetch instructions do shared memory addresses do nothing.
+Data prefetch is provided by \verb=prefetch= instructions. The level of cache intro which the data should be prefetched is specified explicitly. Prefetch instructions to shared memory addresses do nothing.
 
-\subsubsection{Larrabee}
-% "Larrabee: A Many-Core x86 Architecture for Visual Computing". Intel. doi:10.1145/1360612.1360617
-Larrabee also adds new instructions and instruction modes for explicit cache control. Examples include instructions to prefetch data into the L1 or L2 caches and instruction modes to reduce the priority of a cache line or evict lines. For example, streaming data typically sweeps existing data out of a cache. Larrabee is able to mark each streaming cache line for early eviction after it is accessed. These cache control instructions also allow the L2 cache to be used similarly to a scratchpad memory, while remaining fully coherent.
-
-\subsubsection{Altivec}
+\subsubsection{AltiVec}
 %http://gcc.gnu.org/projects/prefetch.html 
+AltiVec is a single-precision floating point and integer SIMD instruction set.
 A prefetch instruction specifies one of four data streams, each of which can prefetch up to 128K bytes, 12K bytes in a contiguous block. Reuse of a data stream aborts prefetch of the current data stream and begins a new one. The data stream stop instructions can be used when data from a stream is no longer needed, for example for an early exit of a loop processing array elements.
 
-Additional AltiVec instructions for cache control are lvxl (Load Vector Indexed LRU) and stvxl (Store Vector Indexed LRU), which indicate that an access is likely to be the final one to a cache block and that the address should be treated as least recently used, to allow other data to replace it in the cache.
+Additional AltiVec instructions for cache control are lvxl (Load Vector Indexed LRU) and stvxl (Store Vector Indexed LRU), which indicate that an access is likely to be the final one to a cache block and that the address should be treated as least recently used, to allow other data to replace it in the cache~\cite{}
 
-\subsection{Intel x86 / SSE}
+\subsubsection{Intel Larrabee}
+% "Larrabee: A Many-Core x86 Architecture for Visual Computing". Intel. doi:10.1145/1360612.1360617
+Intel's graphics-focused Larrabee architecture extended x86 with new instructions and instruction modes for explicit cache control~\cite{Seiler:2008:LMX:1360612.1360617}.
+Examples include instructions to prefetch data into the L1 or L2 caches and instruction modes to reduce the priority of a cache line or evict lines. For example, streaming data typically sweeps existing data out of a cache. Larrabee is able to mark each streaming cache line for early eviction after it is accessed. These cache control instructions also allow the L2 cache to be used similarly to a scratchpad memory, while remaining fully coherent.
+
+\subsubsection{Intel x86 SSE}
 
 Data prefetch is provided by \verb=prefetch= instructions, which take locality hints (in bits 5:3 of the ModR/M byte) about into which level of the cache the data should be placed. The hints are:
 \begin{itemize}
@@ -171,17 +201,17 @@ Data prefetch is provided by \verb=prefetch= instructions, which take locality h
 \end{itemize}
 
 These hints are processor implementation-dependent, and can be overloaded or ignored by a given processor implementation. The amount of data prefetched is also implementation-dependent, but is at least 32B. The other bits in the ModRM byte are reserved. 
-
 \verb=movntq, movntps=, and \verb=maskmovq= are nontemporal SIMD store variants from register to memory that avoid polluting the cache hierarchy, are no-write-allocate, and are weakly-ordered.
 
-\subsection{VLIW}
+\subsection{VLIW Architectures}
 \subsubsection{HPL-PD} 
 % DOI 10.1.1.13.690
 % V. Kathail, M. S. Schlansker, and B. R. Rau. HPL PD architecture specification: Version 1.1. Technical Report HPL-93-80(R.1), Hewlett-Packard, February 2000. http://www.hpl.hp.com/techreports/93/HPL-93-80R1.pdf
 
-Load operations have two modifiers:
-{\em Source cache specifiers} used by the compiler to know the estimated data access latency (default is L1). Violation of the latency implied by this modifier means that a stall is required.
-{\em Target cache specifiers} used by the processors to indicate the highest level at which data should be kept. Encoded in instruction, but may be ignored.
+HPL-PD was a parameterized ILP research processor architecture from HP Labs~\cite{kathail2000hpl}.
+HPL-PD load operations have two modifiers:
+{\em Source cache specifiers} are used by the compiler to know the estimated data access latency (default is L1). Violation of the latency implied by this modifier means that a stall is required;
+{\em Target cache specifiers} are used by the processors to indicate the highest level at which data should be kept. Encoded in instruction, but may be ignored.
 
 \subsubsection{Itanium and Itanium 2}
 % Reference Manual http://people.freebsd.org/~marcel/refs/ia64/itanium2/25111003.pdf
@@ -189,13 +219,10 @@ Load operations have two modifiers:
 % H. Sharangpani and K. Arora. Itanium processor microarchitecture. IEEE Micro, 20(5):24–43, Sept./Oct. 2000. http://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=877948
 % ISA manual http://www.intel.com/Assets/PDF/manual/324091.pdf
 
-Hint instructions for instruction prefetching: activate/deactivate prefetch engine, special hint on branches.
-
+The Itanium VLIW architectures provide int instructions for instruction prefetching, both to activate/deactivate prefetch engine as well as to providea special hint on branches \cite{itanium, itanium}.
+They also include a emph{bias hint}, indicating that the software will modify data withnin cache line (i.e., it should be loaded as E in MESI coherence).
 Ordered loads and stores can be used to force ordering in memory accesses (along with fences).
-
-Bias hint, indicating that SW will modify data in cache line (load as E in MESI coherence).
-
-Explicit data prefetching is done via \verb=lfetch= instruction. Implicit data prefetch is based on the address post-increment of loads, stores, explicit prefetches.
+Explicit data prefetching is done via \verb=lfetch= instruction. Implicit data prefetch is based on the address post-increment of loads, stores, and explicit prefetches.
 
 Loads, stores and explicit data prefetches allocate space according to temporal locality hints, which may either case data not to be allocated, or may affect LRU position. The hints are organized according to an abstraction of a N-level memory hierarchy, in which each level contains both a structure for caching data with temporal locality and a structure for caching data with non-temporal locality. An access treated as nontemporal at level N is treated as temporal at level N+1. Obviously the existence of such structures is ``implementation dependent''. Finding a line closer than the hinted distance does not cause demotion.
 
@@ -209,32 +236,30 @@ Example data cache hints:
 \end{itemize}
 
 The flush cache instruction \verb=fc= invalidates a particular line in all levels. Write buffers can be flushed with \verb=fwb=.
-
 Cache specifiers are V1 (prefetch cache), and C1-C3(main memory).
 
 The data prefetch cache is used to prefetch large amounts of data having little or no temporal locality without disturbing the conventional first level data cache. In other words, the emphasis in the case of data prefetch cache is more on masking load latencies than on reuse. Accesses to the data prefetch cache don't touch the first-level cache. Prefetch operations are encoded by instructions that load to register 0.
 
-\subsection{RISC}
+\subsection{RISC Architectures}
 \subsubsection{PA-RISC}
 %http://gcc.gnu.org/projects/prefetch.html 
-Some load and store instructions modify the base register, providing either pre-increment or post-increment, and some provide a cache control hint; A load instruction can specify spatial locality, and a store instruction can specify block copy or spatial locality. The spatial locality hint implies that there is poor temporal locality and that the prefetch should not displace existing data in the cache. The block copy hint indicates that the program is likely to store a full cache line of data.
+Some load and store instructions modify the base register, providing either pre-increment or post-increment, and some provide a cache control hint; A load instruction can specify spatial locality, and a store instruction can specify block copy or spatial locality. The spatial locality hint implies that there is poor temporal locality and that the prefetch should not displace existing data in the cache. The block copy hint indicates that the program is likely to store a full cache line of data~\cite{gccprefetch}.
 
 \subsubsection{SPARC}
 %http://gcc.gnu.org/projects/prefetch.html 
-The SPARC v9 instruction set architecture defines the PREFETCH (Prefetch Data) and PREFETCHA (Prefetch Data from Alternate Space) [15] instructions, whose variants are specified by the fcn field:
+The SPARC v9 instruction set architecture defines the PREFETCH (Prefetch Data) and PREFETCHA (Prefetch Data from Alternate Space) instructions, with several variants~\cite{gccprefetch}:
 \begin{itemize}
-\item prefetch for several reads  Move the data into the cache nearest the processor (high degree of temporal locality).
-\item prefetch for one read Prefetch with minimal disturbance to the cache (low degree of temporal locality).
-\item prefetch for several writes (and possibly reads)  Gain exclusive ownership of the cache line (high degree of temporal locality).
-\item prefetch for one write  Prefetch with minimal disturbance to the cache (low degree of temporal locality).
-\item prefetch page Shorten the latency of a page fault.
+\item Prefetch for several reads: Move the data into the cache nearest the processor (high degree of temporal locality).
+\item Prefetch for one read: Prefetch with minimal disturbance to the cache (low degree of temporal locality).
+\item Prefetch for several writes (and possibly reads):  Gain exclusive ownership of the cache line (high degree of temporal locality).
+\item Prefetch for one write:  Prefetch with minimal disturbance to the cache (low degree of temporal locality).
+\item Prefetch page: Shorten the latency of a page fault.
 \end{itemize}
 
 
 \subsubsection{POWER}
 %http://www.power.org/resources/downloads/PowerISA_V2.06B_V2_PUBLIC.pdf
 PowerPC 603e controls write-back/write-through and caching-enabled on a per page basis. 
-
 Power 2.06 has the following cache control instructions:
 \begin{itemize}
 \item ``dcbi'': data cache block invalidate
@@ -257,61 +282,93 @@ Power 2.06 has cache locking instructions, which are not hints (cannot be issued
 
 Some Cache Management instructions contain a 4-bit CT field that is used to specify a cache level within a cache hierarchy or a portion of a cache structure to which the instruction is to be applied. The correspondence between the CT value specified and the cache level is 0 = primary cache, 2 = secondary cache, with other implementation-dependent  options possible.
 
-\subsection{Embedded}
+\subsection{Embedded Architectures}
 \subsubsection{TI TMS320C6000 / VelociTI}
 % ISA focus.ti.com/lit/ug/spru189g/spru189g.pdf
 % Cache User's guide http://focus.ti.com/lit/ug/spru656a/spru656a.pdf
 % TMS320C621x/671x DSP Two-Level Internal Memory Reference Guide
-After a reset, L2cache is disabled and all capacity is L2sram. L2 cache can be enabled in the program code by issuing the appropriate chip support library (CSL) commands. Additionally, in
-the linker command file the memory to be used as L2 SRAM has to be specified.
-Further, you can control whether external memory addresses are cacheable or noncacheable. Each external memory address space of 16 Mbytes is controlled by one MAR bit (0: noncacheable, 1:cacheable) of the MAR registers
-CSL also has support for software-directed invalidates, writebacks or writeback-invalidates from L2 or L1 based on address ranges or for the entire cache. CSL also has routines to set cache mode. All these routines work by writing to special purpose registers. Block/range cache operations execute in the background, allowing other
-program accesses to interleave with the block cache operation
+These embedded architectures allow the L2 cache to be reconfigured as a software0managed SRAM scratchpad~\cite{TMS320C6000}.
+After a reset, L2cache is disabled and all capacity is L2sram.
+The L2 cache can be enabled in the program code by issuing the appropriate chip support library (CSL) commands.
+Additionally, in the linker command file the memory to be used as L2 SRAM has to be specified.
+
+The user can also control whether external memory addresses are cacheable or noncacheable.
+Each external memory address space of 16 Mbytes is controlled by a single bit of the MAR registers
+The CSL also has support for software-directed invalidates, writebacks or writeback-invalidates from L2 or L1
+based on either address ranges or for the entire cache.
+The CSL also has routines to set a mode of cache behavior.
+All these routines work by writing to special purpose registers.
+Block/range cache operations execute in the background, allowing other
+program accesses to interleave with the block cache operation.
 
 \subsubsection{Intel X-SCALE}
 %http://download.intel.com/design/intelxscale/31505801.pdf
 
-Can disable and enable the ability of the L1 caches to fill lines. Even when `disabled,' the cache is still checked, but no lines will be filled or evicted. Enabled and disabled via control registers.
+Intel's X-SCALE~\cite{intel-xscale} is an embedded architecture based on ARM.
+It can disable and enable the ability of the L1 caches to fill lines.
+Even when `disabled,' the cache is still checked, but no lines will be filled or evicted. 
+This cache mode is enabled and disabled via control registers.
 
-Individual lines can be locked in the instruction cache with special instructions that use special registers. For correct operation, the line cannot be already present in the cache, so the line must be explicitly invalidated first, using the same special instruction with a different special register value. Way 0 can never be locked. There is no way to check full-ness, so a table of locked addresses must be maintained by software. The entire cache can be unlocked at once. Invalidating a line also unlocks it.
+Individual lines can be locked in the instruction cache with special instructions that use special registers.
+For correct operation, the line cannot be already present in the cache, so the line must be explicitly invalidated first, using the same special instruction with a different special register value. Way 0 can never be locked. There is no way to check full-ness, so a table of locked addresses must be maintained by software. The entire cache can be unlocked at once. Invalidating a line also unlocks it.
 
 For the data cache, a mode bit in a special register can be turned on to cause all following loads to be locked in the cached. Locking mode is turned off by another write to the special register.
-
 A RAM can also be created in the data cache using the same locking mode and a separate special register to allocate new lines with unique virtual addresses, instead of fetching existing data.
-
-It is possible to clean, invalidate, or unlock individual cache lines in the data cache, or all lines in the cache at once. Lines can also be allocated in advance of stores, which avoid unnecessary data fetches (deprecated).
-
+It is possible to clean, invalidate, or unlock individual cache lines in the data cache, or all lines in the cache at once. Lines can also be allocated in advance of stores, which avoid unnecessary data fetches.
 Lines can also be locked, unlocked, allocated, cleaned and invalidate in the L2 cache using writes to different special registers. Set- or way-based invalidates of many L2 lines simultaneously are also possible.
-
 As with the L1 cache, software-managed RAM can be allocated and  and deallocated in the L2 cache on a line-by-line basis.
 
-\subsection{Intel SCC}
-
-Flag cache lines with an ``MBPT'' bit in page table, then apply that marking to all cache lines from that page, resulting in them being marked dirty. Dirty cache lines interact correctly with the gets and puts to the message passing buffer.
-
-Per-core LookUp Table for mapping which addresses map to which memory space (i.e. shared DRAM, private DRAM).
-
-\subsection{Academic Proposals}
+\subsection{Academic and Research Proposals}
 % Data prefetching http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.137.5086
 % Multi-module caches. J. Sanchez and A. Gonzalez. A locality sensitive multi-module cache with explicit management. In Proceedings of the 1999 Conference on Supercomputing.  T. Johnson and W.W. Hwu,  “Run-Time  Adaptive Cache Hierarchy Management via Reference Analysis”,  in Procs. of 24th Int. Symp. on Computer Architecture  (ISCA-24), pp. 3 15-326, June 1997
 
 %TODO: Refrences from Wolf and Kandeshar "Memory System Optimization of Embedded Software"
 
 \begin{description}
-\item [Rigel]: Rigel LPI supports cache management instructions, explicit software-controlled flushes at the granularity of both the line and the entire cache, memory operations that bypass local caches, and prefetch instructions. \cite{kelm-isca09}
-\item [VLS]: Explicit DMA via control registers. Allocation of LS regions via control registers.
-%\item[Conditional Kill]: Modifies the LRU position of block or evicts when a condition is met. A cache line kill state is updated only if an access generated by the kill instruction satisfies the cache line offset condition. For example, consider a cache linesize of 4 words (0, ..., 3), an array A, and a reference A[i]. To set the kill state of a cache line when the reference A[i] accesses the fourth word of  the cache line, the load-store instruction corresponding to the reference A[i] would have the cache line offset value 3 as the condition.  So, whenever the reference A[i] accesses the fourth word of  a cache  line,  the kill state of that cache line would be set.  \cite{jain-iccad01}
+\item [Intel SCC:] 
+Flags cache lines with an ``MBPT'' bit in page table, then applies that marking to all cache lines from that page, resulting in them being marked dirty. Dirty cache lines interact correctly with the gets and puts to the message passing buffer.
+Provides a per-core LookUp Table for mapping which addresses map to which memory space (i.e. shared DRAM, private DRAM)~\cite{clauss2011evaluation}.
+\item [Rigel:] Rigel LPI supports cache management instructions, explicit software-controlled flushes at the granularity of both the line and the entire cache, memory operations that bypass local caches, and prefetch instructions~\cite{kelm-isca09}.
+\item [VLS:] Allocation of virtual local store regions via control registers~\cite{Cook:EECS-2009-131}.
+\item[Conditional Kill]: Modifies the LRU position of block or evicts when a condition is met. A cache line kill state is updated only if an access generated by the kill instruction satisfies the cache line offset condition~\cite{jain-iccad01}.
 \end{description}
 
-\section{Proposal Ideas}
+\section{Future Directions}
 
-Evaluate benefit conferred by specificity?
+The following proposals are predicated on adding software cache control instructions as extensions to RISC-V.
+These could be part of a language extension in support of DMA engine accelerators, or their own separate extension.
+The primary question is which instructions would be the most beneficial to add, and how the behavior they produce should be specified
+by the programmer.
+For example, one possibility would be to evaluate the benefit conferred by the specificity of cache control operations
+with respect to memory regions:
+What granularity provides the most benefit for the least overhead?
 
-Interaction with cache coherence protocol: things in SW managed state should move when their thread migrates but remain stationary otherwise. Exclusive and locked, unless owner thread has gone remote? Or nack requests from other threads to enforce protection?
+A different direction would be to explore software managed cache coherence.
+Coherence between un-synchronized memory accesses is a useless property to provide programmers, because the unpredictable behaviors
+of data races are untenable, even if all the possible runtime behaviors are well defined.
+By identifying synchronized operations and only providing coherence for their target addresses, perhaps the amount of effort
+expended by the hardware can be reduced.
+Such an approach demands a specification for software interaction with some enhanced cache coherence protocol.
+Blocks in a software-managed state should move when their thread migrates but remain stationary otherwise.
+Permissions checks on them can be skipped.
+Such an approach may confer many of the same benefits as Virtual Local Stores.
 
-Cache coherence message cost: more expensive to send data than to send messages, unless number of messages is O(P)? Distance may also matter
+Because software has more information about the global state of the system, for example, which threads are associated
+and where they have been scheduled, it may be possible to calculate tradeoffs that are inaccessable to reactive hardware mechanisms.
+For example, if software is provided with a model of the cost of sending particular cache coherence messages (i.e., how much more expensive it is to send data than to send acknowledgments over certain distances), it may be able to make different scheduling decisions
+or manage the data placement in a different way.
+Creating energy-based models and incorporating them into scheduling decisions is a more sophisticated way
+of deploying software memory management.
 
-Dealing with context switches and SW managed data. Is overhead of adding sw managed data to proc state mitigated by fast flush and restore via dma engines?
+A major concern with software-managed data is dealing with context switches.
+Future studies must account for the overhead of adding software-managed data to the process's state.
+It is possible that this overhead could be mitigated by fast flush and restore operations provided via DMA engines.
+The location and capabilities of DMA engines provided in SoC systems is itself a fruitful area of design space exploration.
 
-Coherence is useless without synchronization.
-
+As we continue to follow the arc of application-specific approaches to energy efficiency,
+software-based solutions tuned to particular algorithms are going to become increasingly appealing.
+Past HPC and embedded architectures have focused on these sorts of capabilities with good reason.
+Going forward, I expect that
+introducing heterogeneity into the memory hierarchy by allowing programmers to opt in to
+when and where they explicity control data movement will be highly effective at
+reducing overall energy per opertation.

@@ -1,5 +1,12 @@
-\appendix{TileLink Memory Opcodes}
+\chapter{TileLink Memory Opcodes}
 \label{a.memopcodes}
+
+In this appendix I define the current set of memory operation codes used by
+the various sub-components of our Rocket Chip generator~\cite{rocket}.
+These opcodes are used primarily at the interface between the processor core and the L1 cache,
+but are currently repurposed for use with the L2 atomic memory operation ALUs,
+as well as for translation between different coherence realms via the \code{op\_code} field
+of TileLink's Acquire messages.
 
 \begin{table}
 \centering
@@ -53,6 +60,9 @@ They are derived from the interface between the Rocket pipeline and its data cac
 They correspond to some degree with the RISC-V RV64A memory operations.
 Similarly, Table~\ref{tab:opsizes} lays out the codes for expressing the size of operation
 that should occur in memory (for atomic operations).
+Table~\ref{tab:memopformats} provides an alternative organization for expressing memory operations,
+which at the time of writing is currently being considered
+for the next generation of the TileLink specification.
 
 \begin{table}[h]
 \begin{center}
