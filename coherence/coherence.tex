@@ -24,17 +24,17 @@ and assumptions about atomically visible behaviors or event priority levels may 
 leading to corrupted data or system deadlock.
 Hardware designers shoulder the burden of maintaining the implicit semantics of the abstracted protocol model
 throughout the concrete controllers and networks that they build.
-This chapter proposes that improving the capabilities of hardware description languages (HDLs) offers us a path foward to lighten this design burden.
+This chapter proposes that improving the capabilities of hardware description languages (HDLs) offers us a path forward to lighten this design burden.
 By raising the level of abstraction at which cache controller logic can be described,
 and from which synthesizable designs can be generated,
 we can smooth over the gap between protocol specification and implementation.
 
 A coherence protocol specifies the exact sequences of messages that must be propagated through the memory hierarchy in order to service memory operations,
 while preserving the Single-Writer-Multiple-Reader invariant throughout a logical epoch.
-Preserving this invariant implies that system creates a global total ordering of reads and write to any given memory location.
+Preserving this invariant implies that the system creates a global total ordering of reads and write to any given memory location.
 Because metadata related to the permissions available on each cache block are distributed throughout the cache hierarchy,
 implementing a protocol becomes an exercise in atomically applying metadata updates across a distributed storage system.
-This mindset leads us to consider an approach to specifying coherence protocols based on transactions,
+This mindset leads us to consider an approach to specifying coherence protocols based on transactions
 and factoring out the expression of the transactions from their content and implementation.
 
 In the previous chapter, I presented TileLink,
@@ -53,7 +53,7 @@ that describes all the global transactions that make up a particular coherence p
 A collection of flows describes every sequence of actions that a protocol can take,
 where actions consist of sending TileLink messages and accessing  data and metadata in local memories.
 The second abstraction is \emph{coherence metadata objects}.
-These objects encapusulate the states that distinguish protocol message flows from one another,
+These objects encapsulate the states that distinguish protocol message flows from one another
 and provide methods for generating TileLink messages and making policy-based decisions within flow transactions.
 The abstraction provided by the metadata objects separates the concerns of the controller design from the concerns of the policy design, 
 while the underlying TileLink substrate ensures forward progress of global protocol transactions.
@@ -95,8 +95,8 @@ Teapot outputs C code for distributed memory implementations and $Mur\phi$ model
 
 Bluespec SystemVerilog (BSV) \cite{bluespec}
 is an HDL that produces synthesizeable hardware implementations based on an absraction called \emph{guarded atomic actions} (GAAs).
-BSV has been proposed a a particularly suitable language for describing distributed cache coherence controllers \cite{dave-memocode05}.
-GAAs consist of a guard (boolean logic predicate), and an action (some kind of state update)
+BSV has been proposed as a particularly suitable language for describing distributed cache coherence controllers \cite{dave-memocode05}.
+GAAs consist of a guard (boolean logic predicate) and an action (some kind of state update)
 that is executed atomically by the hardware control logic when the predicate evaluates to true.
 Becuase GAAs are also an abstraction that are compatible with many formal verification tools,
 and because the BSV compiler produces implementations of rules automatically,
@@ -114,20 +114,25 @@ This approach reflects a bottom-up philosophy to protocol implementation.
 In contrast, we wished to adopt a top-down approach, wherein a global description of transactions
 is decomposed into local sub-transactions, which then drive the design of the individual controllers.
 We therefore turned to the verification literature to find verification strategies based on expressing global descriptions of protocol behavior.
+
 While many transactional models of coherence protocols have been proposed,
-the one best suited to our goals was the \emph{message flow} approach to parameterized procotol verification
+the one best suited to our goals was the \emph{message flow} approach to parameterized protocol verification
 \cite{talupur2008going, oleary-fmcad09}.
 A message flow is a sequence of messages sent among agents following a protocol that
 logically constitutes a single transaction of the protocol. 
 In the next section, we discuss how a global, flow-based description of a protocol can be decomposed into a set
-of local controller transactions, and discus how we implement those local transactions in Chisel,
-our meta-HDL/DSL embedded in Scala.
+of local controller transactions, as well as how we implement those local transactions in Chisel,
+our meta-HDL embedded in Scala.
 
 So far we have discussed prior art in how to implement protocols,
 but we should also review what protocols to consider implementing.
 Heterogeneity in memory access behavior as been a major focus of study for distributed shared memory systems.
-Memory access patterns can general be grouped at a high level into a few common sharing patterns, such as read-modify-write, producer-consumer, and migratory. Systems that support adaptive cache coherence protocols allow the behavior of the protocol to change with detected changes in program behavior.  There are many examples of such adaptive protocols in the distributed memory space include \cite{amza-hpca97,lebeck-archnews95,stenstrom-isca93,cox-isca93}. Note that these designs have a single protocol, but one that varies its behavior dynamically.
-In particular, we used two~\cite{stenstrom-isca93,cox-isca93} as inspiration for the migratory policy provided in our Rocket Chip Generator~\cite{rocket}.
+Memory access patterns can generally be grouped at a high level into a few common sharing patterns, such as read-modify-write, producer-consumer, and migratory.
+Systems that support adaptive cache coherence protocols allow the behavior of the protocol to change with detected changes in program behavior.
+There are many examples of such adaptive protocols in the distributed memory space,
+including \cite{amza-hpca97,lebeck-archnews95,stenstrom-isca93,cox-isca93}.
+Note that these designs have a single protocol, but one that varies its behavior dynamically.
+In particular, we used two academic proposals~\cite{stenstrom-isca93,cox-isca93} as inspiration for the migratory policy provided in our Rocket Chip Generator~\cite{rocket}.
 
 In the shared memory space, designs like FLASH \cite{kuskin-archnews94} have incorporated multiple protocols on top of a single hardware substrate in order to provide adaptability. Generally, transitions between protocols have been triggered by heuristic mechanisms \cite{mukherjee-archnews98}. Others \cite{chandra-sigplan96,falsafi-sc94} have proposed creating application-specific protocols that are tailored to match a particular application's needs.
 These efforts indicate that multiple protocols can share the same underlying communication framework and memory system,
@@ -143,19 +148,19 @@ which are frequently found in design documents.
 Protocol designers use message flows to describe
 the basic organization of a protocol and to reason about its requirements.
 Message flows impose constraints on the order in which the actions appearing within them can happen:
-an action can execute only after any actions it depends upon been executed.
+an action can execute only after any actions it depends upon have been executed.
 
 It is worth noting that the TileLink transactions we illustrated in the previous chapter using message sequence charts
 are a form of message flows.
-All that they lack is information about what coherence protocol related events take place in between the sending
-and receiving of TileLink messages.
+The only information that the flows in that chapter lack is information about what coherence protocol related events take place in between the sending
+and receiving of TileLink particular messages.
 Thus, TileLink is a framework that describes the shapes of a set of possible flows,
 and these outlines can be filled in to create more concrete specifications of protocol behavior.
 
 \begin{figure}
 \centering
 \includegraphics[width=0.8\columnwidth]{coherence/figures/rel-flow.pdf}
-\caption[A volunary writback flow.]{
+\caption[A volunary writeback flow.]{
 A voluntary writeback message flow in a single realm.
 }
 \label{fig:rel-flow}
@@ -164,7 +169,7 @@ A voluntary writeback message flow in a single realm.
 \begin{figure}
 \centering
 \includegraphics[width=0.8\columnwidth]{coherence/figures/acq-flow.pdf}
-\caption[A processor store flow.]{
+\caption[A processor store flow with probes.]{
 A processor store flow in a single realm, which must probe other clients in the realm.
 }
 \label{fig:acq-flow}
@@ -173,36 +178,36 @@ A processor store flow in a single realm, which must probe other clients in the 
 \begin{figure}
 \centering
 \includegraphics[width=0.8\columnwidth]{coherence/figures/outer-acq-flow.pdf}
-\caption[A processor store flow.]{
+\caption[A processor load flow that misses twice.]{
 A processor load flow in a single realm, which must make a request to outer memory.
 }
 \label{fig:outer-acq-flow}
 \end{figure}
 
 The simplest flows are linear ordering of events, usually involving two agents.
-Each entry in the flow is either a simple event, 
+Each entry in the flow is either a simple event,
 corresponding to a single protocol update being committed,
-or a \emph{sub-flow}. recursively composed of simple events.
-Figure~\ref{fig:rel-flow} shows a simple flow based around a voluntary writeback of dirty data from a client cache,
+or a \emph{sub-flow} recursively composed of simple events.
+Figure~\ref{fig:rel-flow} shows a simple flow based around a voluntary writeback of dirty data from a client cache
 using a TileLink Release/Grant transaction.
 
 The notion of sub-flow allows us to
 chop up a complicated flow into smaller units such that each
 unit shows interaction between two or more agents engaged in a tightly-coupled causal interaction.
 An event might have multiple preceding actions,
-or might have more than one succeeding event
+or might have more than one succeeding event.
 Flows may only express a partial order of events and not a total order.
 For all of the above reasons, O'Leary et al. proposed that it is best to represent flows as Directed Acyclic Graphs (DAGs)
 \cite{oleary-fmcad09}.
-Figure~\ref{fig:acq-flow} shows a more complicated flow based around acquiring write permissions on a block that is currently being
+Figure~\ref{fig:acq-flow} shows a more complicated flow that involves acquiring write permissions on a block that is currently being
 shared by multiple clients, again using a 5-step TileLink transaction.
-Figure~\ref{fig:outer-acq-flow} shows another alternative flow based around acquiring read permissions on a block that the manager does not posses a copy of, forcing it to forward the query to an outer realm.
+Figure~\ref{fig:outer-acq-flow} shows annother example flow, one that involves acquiring read permissions on a block that the manager does not possess, forcing it to forward the query to an outer realm.
 
 An important part of verifying protocols using flows is to specify rules that govern non-interference between flows,
 i.e., which flows are allowed to execute in the system at the same time.
 For our family of coherence protocols, these rules are reflected in the specification of the TileLink substrate
 described in the previous chapter.
-Correct implementations of TileLink will by definition enforce the non-interference rules required by our flows.
+Correct implementations of TileLink will, by definition, enforce the non-interference rules required by our flows.
 While we cannot infer the flow non-interference rules automatically from the TileLink specification,
 this congruence is still significant in that it means proofs of a correct TileLink implementation
 are sufficient to guarantee correct flow non-interference.
@@ -215,7 +220,7 @@ In other words, if each flow touches several distinct agents,
 we can collect all those sub-flows applied within an individual type of agent.
 Then, if we can generate agent controllers that are capable of performing each sub-flow atomically,
 as well as send messages to other agents and wait for responses,
-we will have furnished ourselves with a controller that is correctly implements the sub-flows of all
+we will have furnished ourselves with a controller that correctly implements the sub-flows of all
 possible global flows.
 This top-down approach to controller design is central to the productivity of our approach.
 
@@ -310,7 +315,7 @@ which are easily composed together to create complete cache controllers.
 
 Part of our strategy is to create \emph{Transaction Status Handling Registers} (TSHRs).
 These modules contain all the state needed to track the progress of 
-one type of sub-flow, with some handlers capable of merging multiple sub-flows.
+one type of sub-flow with some handlers capable of merging multiple sub-flows.
 We provide a way to execute the actions themselves, as well as to implement the dependencies between actions for each flow.
 Actions include reading and writing the metadata and data arrays,
 performing atomic memory operations (AMOs),
@@ -499,15 +504,15 @@ Figure~\ref{fig:acqtracker} summarizes \code{BroadcastAcquireTracker}, a tracker
 \code{BroadcastsToAllClients}, \code{AcceptsVoluntaryReleases}, 
 \code{EmitsVoluntaryReleases}, \code{AcceptsInnerAcquires}, \code{EmitsInnerProbes}, \code{EmitsOuterAcquires},
 and \code{HasDataBuffer} traits.
-This tracker is used in conjuction with in a broadcast-based messaging medium to handle Acquire transactions,
+This tracker is used in conjuction with in a broadcast-based messaging medium to handle Acquire transactions
 and is an example of combining two traits that use the same messaging channel.
 
-These traits and TSHRs, which are derived from commom sub-flows and from global flows respectively,
+These traits and TSHRs, which are derived from common sub-flows and from global flows respectively,
 demonstrate how we are able to transform high-level descriptions of protocol behavior into HDL descriptions
-that produce syntehsizeable hardware.
+that produce synthesizeable hardware.
 The scoreboard logic they produce and compose manages concurrency and atomicity within the agent.
 However, we have not yet discussed how policy-specific decisions are expressed within the flows,
-and how we can absract such decisions such that the same tracker designs can be used for multiple protocols.
+and how we can abstract such decisions such that the same tracker designs can be used for multiple protocols.
 This policy-centric abstraction is the focus of the next section.
 
 \section{Object-Oriented Coherence Policies}
@@ -515,13 +520,14 @@ This policy-centric abstraction is the focus of the next section.
 As in the previous chapter, we distinguish between coherence policies and coherence protocols.
 A coherence {\em policy} governs how the Single-Writer-Multiple-Reader invariant is represented as metadata identifying available permissions on data blocks.
 A coherence {\em protocol} specifies the exact flows of messages and actions that must be propagated through the memory hierarchy in order to effect a policy.
-While decomposing flows into sub-flow traits has proven to be an effective strategy for managaing concurrency and complexity in cache controller design,
+While decomposing flows into sub-flow traits has proven to be an effective strategy for managing concurrency and complexity in cache controller design,
 this approach does not address how different coherence policies are represented within the flows.
 For example, what do the state update functions actually store in the metadata arrays?
 How are the specific messages required to be sent between agents actually created?
-These are questions are a matter of policy.
+These questions are a matter of policy.
 
-In this section, we present an interface that allows protocol designers to cleanly answer these questions.
+In this section, we present an interface that allows protocol designers to answer these questions
+in a well-factored way.
 Our goal in introducing this abstract interface is to hold some parts of the controller design constant,
 swapping out only the elements of controllers that differ across different policies.
 To this end, we have created a unified \emph{CoherencePolicy} interface
@@ -540,7 +546,7 @@ the metadata about cache block permissions that is stored in local memories.
 One advantage of deploying this particular abstraction is that
 the specific format and contents of the metadata can be changed without changing the methods that cache controller transactions
 use to generate control logic.
-This encapsultation allows these aspects of the cache controller to be developed independently,
+This encapsulation allows these aspects of the cache controller to be developed independently
 and different metadata implementations and policies to be easily swapped for one another.
 By making calls to the methods of these metadata objects, cache controller designers can
 create state machines or sub-flow transactions
@@ -551,7 +557,7 @@ by filling out the response to each method call, they can be certain that the po
 will be applied correctly across any compatible cache or directory controller.
 
 Recall from the previous chapter that TileLink supports hierarchical nesting of protocols via the Manager-Client Pairing (MCP) framework~\cite{beu2011manager}.
-Based this hierarchical structure, we are required to define two distinct types of Metadata objects,
+Based on this hierarchical structure, we are required to define two distinct types of Metadata objects,
 one for agents that act as clients and one for agents that act as managers.
 \emph{ClientMetadata} store the permissions available to a client as it attempts to 
 apply incoming memory operations to a particular block of cached data.
@@ -566,8 +572,8 @@ caches that are intermediate in the hierarchy may store both types.
 
 The following subsections delineate the specific methods that we provide on each type of metadata.
 The methods fall into four main categories.
-Permissions check methods compare an incoming operation against the permissions available in the current metadata state, and determine
-whether the operation is allowed to proceed or what kind of followup action to take.
+Permissions check methods compare an incoming operation against the permissions available in the current metadata state,
+and they determine whether the operation is allowed to proceed or what kind of followup action to take.
 Message creation methods are used to fill in the fields of TileLink message bundles, based on information about the ongoing transaction
 and messages that have been received in the past.
 Update methods mutate the metadata in response to an incoming operation or message.
@@ -592,9 +598,10 @@ The complete API for ClientMetadata can be found in the Rocket Chip Generator~\c
 
 \subsubsection{Permissions Checks}
 
-These boolean functions answer questions about the permissions on a cache line, and in particular are used to determine what actions to take relative to specific memory operations.
+These boolean functions answer questions about the permissions on a cache line, and in particular,
+are used to determine what actions to take relative to specific memory operations.
 Memory operation representations are discussed in Appendix~\ref{a.memopcodes}, but the salient feature is that
-all of them requires either read or read-and-write permissions.
+all of them require either read or read-and-write permissions.
 
 \begin{description}
 \item[isValid():]
@@ -609,7 +616,7 @@ If true, the controller needs to initiate a TileLink coherence transaction using
 Does a secondary miss on the block require another Acquire message?
 If true, in a controller that supports miss-under-miss transactions, initiate a second coherence transaction using \code{makeAcquire}.
 \item[requiresReleaseOnCacheControl(opcode: UInt):]
-Does a cache control operation (e.g. a voluntary flush) require a Release message to be sent to outer memory?
+Does a cache control operation (e.g., a voluntary flush) require a Release message to be sent to outer memory?
 If true, the controller needs to initiate a TileLink coherence transaction using \code{makeVoluntaryRelease}.
 \item[requiresVoluntaryWriteback():]
 Does an eviction caused by a capacity miss require a Release to be sent to outer memory?
@@ -625,7 +632,7 @@ and particular memory operation types.
 
 \begin{description}
 \item[makeAcquire(opcode: UInt, id: UInt, addr: UInt):]
-Constructs an Acquire message, based on this metdata, for a memory operation.
+Constructs an Acquire message, based on this metadata, for a memory operation.
 \item[makeVoluntaryRelease(opcode: UInt, id: UInt, addr: UInt, data: UInt):]
 Constructs a Release message, based on this metadata, for a cache control op.
 \item[makeVoluntaryWriteback(id: UInt, addr: UInt, data: UInt):]
@@ -656,16 +663,16 @@ New metadata initialized after machine reset.
 
 A ManagerMetadata object consists of a set of bits that represent the ``state''
 of a particular cache block,
-i.e. the existence of copies of that block in any client caches
+i.e., the existence of copies of that block in any client caches
 managed by this agent.
 The metadata may also store other information about the cache block,
-for example information about its history, pattern of movement between clients,
+for example, information about its history, pattern of movement between clients,
 or ``ownership'' by clients.
 As with ClientMetadata, there are three types of method calls
 that an agent can make against ManagerMetadata objects:
 permissions checks, message creation, and metadata updates.
-Messages create by managers include Probes of their clients to trigger them
-to Release permissions, and Grants of additional permissions to clients
+Messages created by managers include Probes of their clients to trigger them
+to Release permissions and Grants of additional permissions to clients
 trying to Acquire them.
 In addition to these method calls, ManagerMetadata incorporates an additional
 object-oriented abstraction, DirectoryRepresentation, which encapsulates
@@ -676,7 +683,7 @@ Rocket Chip Generator documentation~\cite{rocket}, but we provide a summary here
 \subsubsection{Permissions Checks}
 
 These boolean functions answer questions about the permissions on a cache block,
-and in particular are used to determine whether it is necessary to Probe any
+and in particular, are used to determine whether it is necessary to Probe any
 clients that currently may have copies of a particular cache block,
 with respect to a client's request to Acquire new permissions or a
 Release of the block from this agent.
@@ -731,7 +738,7 @@ within controllers that do not store any metadata (for example a bus controller)
 
 \subsubsection{Directory Representation}
 
-As a member of of the ManagerMetadata objects,
+As a member of the ManagerMetadata objects,
 we also provide an object-oriented API for accessing and maintaining directory information.
 These directory objects are responsible for tracking the propagation of cache blocks
 across all the clients under the purview of a particular manager.
@@ -766,7 +773,7 @@ we may expand this interface to address other questions.
 \subsection{Creating New Coherence Policies}
 
 So far we have discussed the object-oriented API that our methodology provides to
-protocol flow and cache controller designers, with presents them with coherence metadata objects
+protocol flow and cache controller designers, which presents them with coherence metadata objects
 to manipulate.
 We now discuss provisioning the other side of the interface, from the perspective
 of developers of new coherence policies.
@@ -870,7 +877,7 @@ must be acquired or released in order to effect the desired operation.
 
 Any hierarchical agent has both ClientMetadata (associated with the outer realm)
 and ManagerMetadata (associated with the inner realm).
-Performing a translation between realms necesssitates utilizing methods on both types of metadata objects,
+Performing a translation between realms necessitates utilizing methods on both types of metadata objects,
 based on the TileLink messages that triggered the new inner or outer sub-flow.
 TileLink determines the ordering/interleaving of the outer transaction with the inner transaction;
 and the CoherencePolicy's job is to determine which translated transaction is needed.
@@ -878,13 +885,13 @@ There are two pairs of TileLink messages that cross realm boundaries,
 Acquire/Grant and Probe/Release.
 We discuss each in turn.
 
-To continue a Acquire transaction originating in the inner realm
+To continue an Acquire transaction originating in the inner realm
 by initiating a sub-flow in the outer coherence realm, we check the opcode
 of the original transaction's Acquire message against the ClientMetadata stored in this agent.
 If the metadata indicates that an outer transaction is required, this agent (acting as a client),
 sends a further request to its manager and awaits a Grant response.
 
-Another transalation occurs when a hierarchical agent receives a Probe message from
+Another translation occurs when a hierarchical agent receives a Probe message from
 the outer coherence realm.
 In this case, the outer Probe's opcode must be compared against the permissions stored in the ClientMetadata.
 If these permissions would be reduced, the inner realm's ManagerMetadata must be consulted in order
@@ -913,7 +920,7 @@ requests for the block, and the copy of the block at the LLC/memory is potential
 \item[S:] The block is valid but not exclusive, not dirty, and not owned. The cache has a read-only copy of the block. Other caches may have valid, read-only copies of the block.
 \item[E:] The block is valid, exclusive, and clean. The cache has a read-only copy of the
 block. No other caches have a valid copy of the block, and the copy of the block in the
-LLC/memory is up-to-date. 
+LLC/memory is up to date. 
 \end{description}
 
 We have also implemented a more advanced \emph{migratory} protocol. 
@@ -946,7 +953,7 @@ Migratory & 7 & \ding{52} & \ding{52} & \ding{52} & \ding{52} \\ \hline
 \end{table}
 
 In addition to the five different policies, we also provide three different hierarchical agent implementations.
-These include two types of Broadcast networks, and a LXCache.
+These include two types of Broadcast networks, and an LXCache.
 The LXCache can be used to implement any outer cache.
 All the controller implementations can be combined with any policy,
 as well as a TileLink-compatible Network-on-Chip (NoC),
@@ -957,8 +964,8 @@ the XX lines of Chisel code we use to express the local transactions
 to be reused across the three manager agent implementations.
 At the same time,
 the YY lines of code used to express each policy share ZZ lines of common policy decision-making logic.
-Overall the entire memory generator, include cache storage arrays, networks and converters,
-are expressed in less than AA lines of Chisel code.
+Overall the entire memory generator, including cache storage arrays, networks and converters,
+is expressed in less than AA lines of Chisel code.
 
 %Performance measurements, holding design parameters constant (other than core count?).
 %Figure~\ref{} shows MI vs MEI for read-only data.
@@ -976,8 +983,8 @@ In our paradigm, a protocol consists of many transactional message flows.
 Flows may share common sub-flows, which can be codified as local transactions on state
 and then mixed together to form controller logic,
 with dependencies among sub-flows being inferred from the global flows.
-Flows are shaped by and utilize our metadata objects (to define policy-based permissions)
-and TileLink substrate (for deadlock-free ordering).
+Flows utilize our metadata objects to define policy-based permissions
+and and are shaped by our TileLink substrate for deadlock-free ordering.
 Figure~\ref{fig:overview} highlights the interplay between message flows, coherence metadata objects, and TileLink.
 
 \begin{figure}[t!]
@@ -992,8 +999,7 @@ The separation of concerns between message flows, coherence metadata objects, an
 Coherence metadata objects abstract the policy decisions inherent to the protocol.
 Queries made against coherence metadata objects act to determine which flow or sub-flow is occuring.
 The policy encapsulated by the metadata objects defines the complete set of custom TileLink message types
-associated with a particular protocol,
-and determines which ones are sent within a given flow.
+associated with a particular protocol and determines which ones are sent within a given flow.
 A metadata-based policy is not concerned with anything having to do with time or ordering,
 only with what action needs to be taken when the system is in a particular state.
 This factoring allows multiple policies to be plugged in without changing controller design
@@ -1004,20 +1010,21 @@ as long as certain guarantees about agent behavior are satisfied.
 The framework thereby determines the possible shapes and relative priorities of flows,
 defining several sub-flow shapes that are safe to compose hierarchically.
 The framework determines what types of messages any coherence policy methods can possibly output.
-It is not not concerned with which messages should be sent under what conditions,
+It is not concerned with which messages should be sent under what conditions,
 just the relative priority and allowed orderings of the general message types.
 This factoring allows multiple network implementations to be plugged in without changing controller design
 or policy contents.
 
-Message flows act as the glue between policy contol logic and network substrate by informing the design of the agent controller logic itself.
-In specifying the local sub-flows that occur within each controller types, message flows determine
+Message flows act as the glue between the policy control logic and
+the network substrate by informing the design of the agent controller logic itself.
+In specifying the local sub-flows that occur within each controller type, message flows determine
 which policy methods a particular agent calls upon receipt of particular TileLink message types,
 how it sends particular message types in response,
 and the ordering constraints in data and metadata reads and writes.
 This factoring allows the implementation of the cache controller logic
 to be changed without requiring changes to the policy description or network implementation.
 
-Taken together, we can see how the tradeoffs in information available within each abstraction
+Taken together, we can see how the trade-offs in information available within each abstraction
 help to make protocol design more productive and tractable.
 By separating information about timing from policy decisions, policy designers only have to consider
 current state and desired operation, yet know what general type of message need be produced.
@@ -1029,11 +1036,11 @@ both abstractions provide structure to the high-level, global message flows that
 
 The most concrete direction for future work in this area is to use our CoherencePolicy interface
 in the design of custom protocols that feature additional adaptability features.
-These features could involve automatically detecting memory access patterns in hardware,
+These features could involve automatically detecting memory access patterns in hardware
 and proactively managing data placement policies accordingly, similar to 
 the Migratory policy whose features we discussed in a previous section of this chapter.
 Alternatively, we might want to enable hooks to allow for software control of coherence states,
-possibly via further memory opcodes targetting individual cache blocks and triggering new transaction flows.
+possibly via further memory opcodes targeting individual cache blocks and triggering new transaction flows.
 This approach could also involve integration with other software-based data placement strategies, such as VLS~\cite{Cook:EECS-2009-131}.
 Appendix~\ref{a.swmem} provides an overview of related work in this area.
 
@@ -1042,7 +1049,8 @@ have incorporated multiple protocols on top of a single hardware substrate.
 We expect that it will be relatively straightforward  to emulate this strategy by
 running multiple protocols on a single TileLink interconnection substrate.
 The open question is how best to enable software control over which protocol to use for which data.
-For example, should this specialization be specified via a global mode switch, or instead for particular memory regions.
+For example, should this specialization be specified via a global mode switch, or instead
+differentiated for particular memory regions.
 The latter implies that multiple protocols would be in operation on the same network at the same time.
 Ideally, we will be able to capture such complicated meta-protocols using the same set of interfaces we have defined here.
 
@@ -1072,17 +1080,17 @@ particularly those related to permission checks.
 
 As this toolset matures, we anticipate a wealth of design space exploration opportunities to arise.
 The hierarchical nature of TileLink makes it possible to generate arbitrarily nested multi-level memory hierarchies.
-Improvements to the Chisel ecosystem are advancing the state of the art in FPGA-based energy consumption modelling.
+Improvements to the Chisel ecosystem are advancing the state of the art in FPGA-based energy consumption modeling.
 Future work should deploy these capabilities to measure the efficacy of data movement strategies,
-as well as questions related to storage versus communication costs, for example, the coarseness of directory representations.
+as well as questions related to storage versus communication costs; for example, the coarseness of directory representations.
 We hope that our open source frameworks will prove to be a valuable tool for memory hierarchy researchers.
 
 \section{Conclusion}
 
 Cache coherence protocol design is one of the toughest challenges in computer architecture.
-Through better abstractions, we have attempt to reduce the burden put on hardware developers
+Through better abstractions, we have attempted to reduce the burden put on hardware developers
 to correctly interpret the implicit semantics of abstract coherence models in their implementations.
-We propose a top-down approach to protocol specification based on message flows, and provide a strategy
+We propose a top-down approach to protocol specification based on message flows, and we provide a strategy
 for transforming such specifications into Chisel implementations of cache controllers.
 We also utilize object-oriented programming to encapsulate the policy-specific decisions encoded
 in the flows, making it easy to swap policies without changing any controller HDL source code.

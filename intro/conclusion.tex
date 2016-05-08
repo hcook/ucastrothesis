@@ -33,7 +33,7 @@ A single-source language approach encourages developers to write parameterized h
 which in turn improves code reuse both within a given design and across generations of design iterations.
 Chapter~\ref{c.tilelink} and Chapter~\ref{c.coherence} demonstrated how a design choice as complicated and pervasive as a multi-level cache coherence protocol can be made
 into a tuneable design parameter when properly factored out from the rest of the design.
-Chapter~\ref{c.parameters}'s focus on extending Chisel with novel parameterization techniques reflects the criticality of generator parameterization capabilities to our agile developement process.
+Chapter~\ref{c.parameters}'s focus on extending Chisel with novel parameterization techniques reflects the criticality of generator parameterization capabilities to our agile development process.
 By providing support for generating a family of interchangable protocols rather than one single protocol, my thesis has enabled us to iterate on protocol design as we scaled up the size and complexity of the memory hierarchy across chip iterations.
 
 We have composed these various libraries of tools and generators into a complete, open source SoC chip generator, called Rocket Chip.
@@ -44,7 +44,7 @@ substantial components of the design through parameterization.
 We can also both test the output of individual generators as well as perform
 integration tests on the whole design, where the tests are also
 parameterized so as to exercise the entire design-under-test.
-The Rocket Chip generator and its test suites are freely avaiable as an open source project,
+The Rocket Chip generator and its test suites are freely available as an open source project,
 and we hope that it will form the basis of future research projects and industrial applications.
 We used Rocket Chip to produce three distinct families of chips over four years in an interleaved fashion, 
 all from the same source code base, but each specialized differently to evaluate distinct research ideas.
@@ -68,16 +68,15 @@ and as we strive to scale it to larger client counts involving multiple sockets,
 The metadata objects that encapsulate the coherence policy are designed to be easily extensible with
 further custom states and custom TileLink messages.
 Currently, they are only parameterized by the format of the directory information held in ManagerMetadata,
-and this might be desirable to change for protocols with more complicated heuristics.
+and this might be desirable to add additional ones for protocols with more complicated heuristics.
 While different realms may employ different coherence policies,
 the existing design assumes only a single policy will ever be used in a particular realm.
-Allowing the policy to be switched at runtime, or allowing multiple policies to be depolyed at the same time,
-will require being able to automatically expanding the encapsulated state.
+Allowing the policy to be switched at runtime or allowing multiple policies to be deployed at the same time will require the ability to expand the encapsulated state automatically.
 
 \section{Future Challenges}
 
 As I envision how future efforts in this area can build on the groundwork provided by this thesis and address its limitations,
-the unifying theme is increased automation and closing the loops between
+the unifying theme is increased automation and closing the loop between
 design, specification, implementation, deployment, evaluation, and verification.
 
 \subsection{Design Space Exploration}
@@ -90,9 +89,9 @@ to close the loop between feedback from one iteration of examining a
 set of design instances and selecting points for further exploration.
 By capturing and storing the results of past explorations that included certain parameterizations
 of certain subsets of a design, we can inform the direction of future searches.
-By building up models based on parameter values, we can potentially avoid even having to elaborate those
+By building up models based on parameter values, we can potentially avoid ever having to elaborate those
 portions of the design for some evaluations.
-Intelligent design space exploration is the next frontier of improving designer productivity.
+Intelligent design space exploration is the next frontier for improving designer productivity.
 
 \subsection{Formal Specification and Verification}
 
@@ -111,8 +110,8 @@ There may be further opportunities afforded by hooking such automated test gener
 
 I also hope that future work will exploit improvements in Chisel functionality to close the remaining gap in
 automating the process of producing verification and synthesis results from the same high-level description.
-While the techniques propsoed in this thesis greatly reduce the burden put on cache controller designers,
-they still require human intervention to translate from the the local flow descriptions into individual controllers' logic.
+While the techniques proposed in this thesis greatly reduce the burden put on cache controller designers,
+they still require human intervention to translate from the the local flow descriptions into the logic of individual controllers.
 Deriving the entirety of controllers by employing Bluespec-style rule engines would be the next step in
 automated protocol development.
 
@@ -162,7 +161,7 @@ As a small group of researchers attempting to design and fabricate multiple fami
 and lacking the massive resources of industrial design teams,
 we were forced to abandon standard industry practices and explore different
 approaches to design hardware more productively.
-The development model we adopted as a result of our limited resources, changing requireents, and more productive hardware tools
+The development model we adopted as a result of our limited resources, changing requirements, and more productive hardware tools
 eventually led us to define a set of principles to guide a new agile hardware development methodology.
 
 In our agile hardware methodology, we first generate a trivial prototype with a minimal working feature set and push it all the way through the toolflow to a point where it could be taped out for fabrication.
@@ -172,14 +171,14 @@ As we iteratively add features to the generator, we can retarget our efforts to 
 By parameterizing the design generator, we can smoothly scale the size of its output from test chip to final product without rewriting any hardware modules.
 This thesis thereby serves as a case study in leveraging lessons learned from the software world by
 applying aspects of the software agile development model to hardware design,
-and particularly coherent memory hierarchy design.
+and particularly, coherent memory hierarchy design.
 
 My thesis is that the semantic gap between productive, verifiable descriptions and parameterized, efficient implementations
-is not a fundamental hurdle to the design of increasingly customized cache coherent memory heirarchies.
-By separating the concerns of message flows from policy desisions and the underlying network substrate,
+is not a fundamental hurdle to the design of increasingly customized cache coherent memory hierarchies.
+By separating the concerns of message flows from policy decisions and the underlying network substrate,
 I provide tools that naturally produce correct, composable implementations based on a high level description,
 smoothing over the semantic gap between them through beneficial layers of abstractions.
 By deeply parameterizing memory heirarchies, I encourage new SoC developers to rely on hardware generators
-and use them to explore novels areas of this rich design space.
+and use them to explore novel areas of this rich design space.
 The power to rapidly compose and extend designs in this way will be at the heart of the nascent agile hardware development movement.
 
