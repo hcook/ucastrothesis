@@ -341,15 +341,18 @@ constructing interacting state machines to handle each sub-flow.
 \centering
 \begin{scala}
 trait AcceptsVoluntaryReleases extends HasVoluntaryReleaseMetadataBuffer {
+  // Scoreboard bits tracking sub-flow progress
   lazy val pending_irel_data = Reg(init=Bits(0, width = innerDataBeats))
   lazy val pending_vol_ignt = connectTwoWayBeatCounter(up = io.inner.release, down = io.inner.grant)
 
+  // Logic to control whether this sub-flow can be merged
   def irel_can_merge: Bool
   def irel_same_xact: Bool
   def irel_is_accepted: Bool = io.inner.release.fire() &&
                                  (io.alloc.irel || irel_can_merge || irel_same_xact)
   def irel_is_allocating: Bool = state === s_idle && io.inner.release.valid && io.alloc.irel
 
+  // Actually wiring to accept Releases and send Grant responses
   def innerRelease(block_vol_ignt: Bool = Bool(false), next: UInt = s_busy) {
     pending_irel_data := (pending_irel_data & dropPendingBitWhenBeatHasData(io.inner.release))
     
@@ -391,11 +394,10 @@ which accepts Releases from clients and issues acknowledging Grants.
 trait EmitsInnerProbes extends HasBlockAddressBuffer
     with HasXactTrackerStates
     with HasPendingBitHelpers {
-  def io: HierarchicalXactTrackerIO
 
+  // Scoreboard bits tracking sub-flow progress
   val pending_iprbs = Reg(UInt(width = innerNCachingClients))
   val curr_probe_dst = PriorityEncoder(pending_iprbs)
-
   lazy val pending_irels = connectTwoWayBeatCounter(up = io.inner.probe, down = io.inner.release)
 
   def full_representation: UInt
@@ -404,6 +406,7 @@ trait EmitsInnerProbes extends HasBlockAddressBuffer
                          !io.irel().isVoluntary() &&
                          state === s_inner_probe
                          
+  // Actual wiriing to send Probes and await Release responses
   def innerProbe(prb: Probe, next: UInt) {
     pending_iprbs := pending_iprbs & dropPendingBitAtDest(io.inner.probe)
     io.inner.probe.valid := state === s_inner_probe && pending_iprbs.orR
@@ -416,7 +419,6 @@ trait EmitsInnerProbes extends HasBlockAddressBuffer
      scoreboard += (pending_iprbs.orR, pending_irels)
   } 
 } 
-
 \end{scala} 
 \caption[The EmitsInnerProbes trait.]{
 The \code{EmitsInnerProbes} trait defines the \code{innerProbe} method that generates the logic associated with this sub-flow,
@@ -425,17 +427,59 @@ which sends Probes to clients and awaits acknowledging Releases.
 \label{fig:probetrait}
 \end{figure}
 
+\begin{figure}
+\centering
+\begin{scala}
+trait ReadsFromOuterCacheDataArray extends HasCoherenceMetadataBuffer
+    with HasRowBeatCounters
+    with HasDataBuffer {
+  // Scoreboard bits tracking sub-flow progress
+  val pending_reads = Reg(init=Bits(0, width = innerDataBeats))
+  val pending_resps = Reg(init=Bits(0, width = innerDataBeats))
+  val curr_read_beat = PriorityEncoder(pending_reads)
+
+  // Actual wiring to send messages and await responses
+  def readDataArray(drop_pending_bit: UInt,
+                    add_pending_bit: UInt = UInt(0),
+                    block_pending_read: Bool = Bool(false)) {
+    val port = io.data
+    pending_reads := (pending_reads & dropPendingBit(port.read) & drop_pending_bit) | add_pending_bit
+    port.read.valid := state === s_busy && pending_reads.orR && !block_pending_read
+    port.read.bits := L2DataReadReq(
+                        id = UInt(trackerId),
+                        way_en = xact_way_en,
+                        addr_idx = xact_addr_idx,
+                        addr_beat = curr_read_beat)
+    
+    pending_resps := (pending_resps & dropPendingBitInternal(port.resp)) |
+                       addPendingBitInternal(port.read)
+    
+    scoreboard += (pending_reads.orR, pending_resps.orR)
+    
+    mergeDataInternal(port.resp)
+  }
+}
+\end{scala} 
+\caption[The ReadsFromOuterCacheDataArray trait.]{
+The \code{ReadsFromOuterCacheDataArray} trait defines the \code{readDataArray} method that generates the logic associated with this sub-flow,
+which sends requests to the local data SRAM array and awaits data responses.
+}
+\label{fig:readtrait}
+\end{figure}
+
 We now show examples of some examples of traits containing methods that generate logic implementing sub-flow actions.
 Figure~\ref{fig:volreltrait} shows the \code{AcceptsVoluntaryReleases} trait, which accepts voluntary writebacks from clients,
 writes the data to some kind of backing storage (which may be local or require further messaging),
 and then acknowledges the writeback with a Grant message to the original client.
 Note that this trait provides an output hook for ensuring that the intial Release is completed
 and an input hook for ensuring that the writeback has been committed to some kind of backing memory.
-Figure~\ref{fig:probetrait} shows the \code{EmitsInnerProbes} trait, which send Probes to clients in order to prompt them to Release permissions on a cache block.
+Figure~\ref{fig:probetrait} shows the \code{EmitsInnerProbes} trait, which sends Probes to clients in order to prompt them to Release permissions on a cache block.
 The tracker must wait until an appropriate number of Release acknowledgements or writebacks have been collected before advancing
 to the next stage, and this trait provides an output hook to do so.
 The two traits are composable, in that a particular tracker generator can mix-in both so as to handle Release associated with
 both voluntary writebacks and probe responses.
+Figure~\ref{fig:readtrait} shows the \code{ReadsFromOuterCacheDataArray} trait, which sends requests to a local SRAM array contain the actual copies of the data blocks in order to read one.
+This trait is composable with the previous two, and is used in cases where no accepted Release provided a copy of the data and there is a local SRAM data array.
 
 \begin{figure}
 \centering
@@ -444,16 +488,8 @@ class CacheVoluntaryReleaseTracker(trackerId: Int)(implicit p: Parameters)
     extends VoluntaryReleaseTracker(trackerId)(p)
     with HasDataBuffer
     with WritesToOuterCacheDataArray {
-  val io = new L2XactTrackerIO
-
-  // Avoid metatdata races with writebacks
-  routeInParent(iacqMatches = inSameSet(_, xact_addr_block))
-
   // Initialize and accept pending Release beats
-  innerRelease(
-    block_vol_ignt = pending_writes.orR,
-    next = s_meta_read)
-
+  innerRelease(block_vol_ignt = pending_writes.orR, next = s_meta_read)
   io.inner.release.ready := state === s_idle || irel_can_merge || irel_same_xact
 
   // Begin a transaction by getting the current block metadata
@@ -487,10 +523,51 @@ and updates the metadata array.
 \begin{figure}
 \centering
 \begin{scala}
+class BroadcastAcquireTracker(trackerId: Int)(implicit p: Parameters)
+    extends AcquireTracker(trackerId)(p)
+    with EmitsVoluntaryReleases
+    with BroadcastsToAllClients
+    with HasByteWriteMaskBuffer {
+  // First, take care of accpeting new acquires or secondary misses
+  // Handling of primary and secondary misses' data and write mask merging
+  innerAcquire(can_alloc = Bool(false), next = s_inner_probe)
+  io.inner.acquire.ready := state === s_idle || iacq_can_merge || iacq_same_xact
+  
+  // Track which clients yet need to be probed and make Probe message
+  // If a writeback occurs, we can forward its data via the buffer,
+  // and skip having to go outwards
+  val skip_outer_acquire = pending_ignt_data.andR
+  innerProbe(
+    inner_coh.makeProbe(curr_probe_dst, xact_iacq, xact_addr_block),
+    Mux(!skip_outer_acquire, s_outer_acquire, s_busy))
+  // Also accept any voluntary releases received during this time
+  innerRelease(block_vol_ignt = pending_vol_ognt)
+  io.inner.release.ready := irel_can_merge || irel_same_xact
+  mergeDataInner(io.inner.release)
 
+  // If there was a writeback, forward it outwards
+  outerRelease(outer_coh.onHit(M_XWR), data_buffer(orel_data_idx))
+
+  // Send outer request for miss
+  outerAcquire(caching = !xact_iacq.isBuiltInType(), coh = outer_coh, next = s_busy)
+
+  // Handle the response from outer memory
+  mergeDataOuter(io.outer.grant)
+
+  // Acknowledge or respond with data
+  innerGrant(
+    ignt_data = data_buffer(ignt_data_idx),
+    ignt_pending = pending_orel || pending_ognt || pending_vol_ognt)
+
+  // Wait for everything to quiesce
+  quiesce()
+}
 \end{scala} 
 \caption[The BroadcastAcquireTracker.]{
-The BroadcastAcquireTracker.
+The BroadcastAcquireTracker is initialized upon receiving a new Acquire request.
+It issues probes to all the other clients and collects responses into its data buffer.
+If no Release has dirty data, it queries the backing memory in the outer realm to get a copy,
+and then Grants it to the originally requesting client.
 }
 \label{fig:acqtracker}
 \end{figure}
@@ -500,12 +577,14 @@ They do this by referencing names bits in the scoreboard logic.
 Figure~\ref{fig:volreltracker} outlines \code{CacheVoluntaryReleaseTracker}, a tracker that combines the
 \code{WritesToOuterCacheDataArray}, \code{AcceptsVoluntaryReleases}, and \code{HasDataBuffer} traits.
 This tracker guarantees forward progress in a hierarchical cache by always being available to sink voluntary writebacks.
+It writes written-back data into a local SRAM data array.
 Figure~\ref{fig:acqtracker} summarizes \code{BroadcastAcquireTracker}, a tracker that combines the
 \code{BroadcastsToAllClients}, \code{AcceptsVoluntaryReleases}, 
 \code{EmitsVoluntaryReleases}, \code{AcceptsInnerAcquires}, \code{EmitsInnerProbes}, \code{EmitsOuterAcquires},
 and \code{HasDataBuffer} traits.
 This tracker is used in conjuction with in a broadcast-based messaging medium to handle Acquire transactions
-and is an example of combining two traits that use the same messaging channel.
+and is an example of combining two traits that use the same messaging channel (i.e.,
+ \code{AcceptsVoluntaryReleases} and \code{EmitsInnerProbes}).
 
 These traits and TSHRs, which are derived from common sub-flows and from global flows respectively,
 demonstrate how we are able to transform high-level descriptions of protocol behavior into HDL descriptions
@@ -828,13 +907,17 @@ and the CoherencePolicy and Metadata objects.
 CoherencePolicy objects are parameterized by the DirectoryRepresentation that they use.
 More complicated policies could potentially be additionally parameterized in order to tune their heuristic behavior.
 Metadata objects are parameterized by the TileLinkParameters objects of the TileLink network with which they are associated.
-Figure~\ref{fig:cdepolicy} illustrates these relationships.
+Figure~\ref{fig:cdepolicy} illustrates these relationships using an L2CacheBank as an examples
 
 \begin{figure}[t!]
 \centering
-%\includegraphics[width=1\columnwidth]{coherence/figures/cdepolicy.pdf}
-\caption[Parameterizing Coherence Policies.]{
-Parameterizing Coherence Policies.
+\includegraphics[width=1\columnwidth]{coherence/figures/cdepolicy.pdf}
+\caption[Parameterizing coherence protocol agents with CoherencePolicies.]{
+Parameterizing an L2CacheBank agent using CDEs.
+We inject specialized parameters into different
+objects and interfaces within the same generator depending on which
+TileLink realm they are associated with.
+Additional parameters control agent-specific design decisions, such as cache array organization.
 }
 \label{fig:cdepolicy}
 \end{figure}
@@ -960,10 +1043,36 @@ as well as a TileLink-compatible Network-on-Chip (NoC),
 in order to make a complete protocol fabric.
 
 The interoperability and abstracts deployed in our memory hierarchy generator allow
-the XX lines of Chisel code we use to express the local transactions 
+the 680 lines of Chisel code we use to express the local transactions 
 to be reused across the three manager agent implementations.
 At the same time,
-the YY lines of code used to express each policy share ZZ lines of common policy decision-making logic.
+the 85--143 lines of code used to express each policy share 110 lines of common policy decision-making logic.
+Table~\ref{tab:loc} provides a breakdown of the number of lines of Chisel code used to express
+each type of component in the complete protocol implementation.
+The critical point is that individual policies can be easily understood by a developer;
+they fit on a single screen!
+
+\begin{table}[t] 
+\begin{center}
+\begin{tabular}{|l|r|} 
+\hline
+Policy common & 110 \\ \hline
+per Policy & 85, 95, 112, 114, 143 \\ \hline
+per DirRep & 10 \\ \hline \hline
+TileLink channels & 951 \\ \hline \hline
+TileLink traits & 531 \\ \hline
+Cache traits & 149 \\ \hline \hline
+Cache trackers & 351 \\ \hline
+Broadcast trackers & 126 \\ \hline
+Bufferless trackers & 67 \\ \hline \hline
+Total & 3534\\ \hline
+\end{tabular}
+\caption{Overview of the lines of Chisel code used to express features of the
+coherence protocol implementation in the Rocket Chip Generator.}
+\label{tab:loc}
+\end{center}
+\end{table}
+
 Overall the entire memory generator, including cache storage arrays, networks and converters,
 is expressed in less than AA lines of Chisel code.
 
@@ -978,7 +1087,6 @@ is expressed in less than AA lines of Chisel code.
 This chapter has introduced a set of abstractions and interfaces that make it more productive to write extensible coherence protocols.
 In that spirit, in this section I attempt to distill the relationships between our various protocol abstractions and highlight which information they encapsulate and expose.
 
-
 In our paradigm, a protocol consists of many transactional message flows.
 Flows may share common sub-flows, which can be codified as local transactions on state
 and then mixed together to form controller logic,
@@ -989,7 +1097,7 @@ Figure~\ref{fig:overview} highlights the interplay between message flows, cohere
 
 \begin{figure}[t!]
 \centering
-%\includegraphics[width=1\columnwidth]{coherence/figures/overview.pdf}
+\includegraphics[width=1\columnwidth]{coherence/figures/overview.pdf}
 \caption[Separation of Concerns.]{
 The separation of concerns between message flows, coherence metadata objects, and the TileLink framework.
 }

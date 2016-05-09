@@ -183,7 +183,7 @@ Data prefetch is provided by \verb=prefetch= instructions. The level of cache in
 AltiVec is a single-precision floating point and integer SIMD instruction set.
 A prefetch instruction specifies one of four data streams, each of which can prefetch up to 128K bytes, 12K bytes in a contiguous block. Reuse of a data stream aborts prefetch of the current data stream and begins a new one. The data stream stop instructions can be used when data from a stream is no longer needed, for example for an early exit of a loop processing array elements.
 
-Additional AltiVec instructions for cache control are lvxl (Load Vector Indexed LRU) and stvxl (Store Vector Indexed LRU), which indicate that an access is likely to be the final one to a cache block and that the address should be treated as least recently used, to allow other data to replace it in the cache~\cite{}
+Additional AltiVec instructions for cache control are lvxl (Load Vector Indexed LRU) and stvxl (Store Vector Indexed LRU), which indicate that an access is likely to be the final one to a cache block and that the address should be treated as least recently used, to allow other data to replace it in the cache~\cite{gccprefetch}.
 
 \subsubsection{Intel Larrabee}
 % "Larrabee: A Many-Core x86 Architecture for Visual Computing". Intel. doi:10.1145/1360612.1360617
@@ -259,28 +259,34 @@ The SPARC v9 instruction set architecture defines the PREFETCH (Prefetch Data) a
 
 \subsubsection{POWER}
 %http://www.power.org/resources/downloads/PowerISA_V2.06B_V2_PUBLIC.pdf
-PowerPC 603e controls write-back/write-through and caching-enabled on a per page basis. 
-Power 2.06 has the following cache control instructions:
+PowerPC 603e controlled write-back/write-through and caching-enabled capabilities on a per page basis,
+and had two data prefetch instructions~\cite{gccprefetch}.
+
+Power 2.06 has the following cache control instructions~\cite{power2}:
 \begin{itemize}
-\item ``dcbi'': data cache block invalidate
-\item ``dcbt'': data cache block touch, data prefetch into a touch buffer, may use Data Stream Control Register to affect HW behavior. (4 straight pages of ``Programming Note'' in the manual)
-\item ``dcbtst'': data cache block touch for store, data prefetch, read with intent to modify
-\item ``dcbz'': data cache block clear to zero, zeros all bytes, treated as a store
-\item ``dbca'': data cache block allocate, allocates undefined space in the cache, treated as a store. Presumably all will be overwritten
-\item ``dcbst'': data cache block store, stores the block to memory if it has been modified
-\item ``dcbf'': data cache block flush, invalidates unmodified block or writes back modified one
-\item ``icbt'': instruction cache block touch, prefetch into instruction cache
+\item ``dcbi'': data cache block invalidate.
+\item ``dcbt'': data cache block touch, data prefetch into a touch buffer, may use Data Stream Control Register to affect HW behavior.
+\item ``dcbtst'': data cache block touch for store, data prefetch, read with intent to modify.
+\item ``dcbz'': data cache block clear to zero, zeros all bytes, treated as a store.
+\item ``dbca'': data cache block allocate, allocates undefined space in the cache, treated as a store. 
+\item ``dcbst'': data cache block store, stores the block to memory if it has been modified.
+\item ``dcbf'': data cache block flush, invalidates unmodified block or writes back modified one.
+\item ``icbt'': instruction cache block touch, prefetch into instruction cache.
 \end{itemize}
 
-Power 2.06 has cache locking instructions, which are not hints (cannot be issued speculatively, etc.). The particular cache block being targeted are identified with RA and RB. It is implementation dependent whether coherence invalidate requests and cache control invalidates unlock these cache lines. Overlocking of a given set is also report in an implementation-dependent manner. The instructions are:
+Power 2.06 has cache locking instructions that target specific cache block addresses.
+These instructions are not hints, meaning they cannot be issued speculatively.
+It is implementation dependent whether coherence invalidate requests and cache control invalidates unlock these cache lines.
+Over-locking of a given set is reported in an implementation-dependent manner.
+The instructions are:
 \begin{itemize}
-\item ``dcbtls'' - Data cache block touch and lock set.
-\item ``dcbtstls'' - Data cache block touch for store and lock set.
-\item ``icbtls'' - Instruction cache block touch and lock set.
-\item ``dcblc/icblc'' - Clear cache block lock in data/instruction cache
+\item ``dcbtls'': Data cache block touch and lock set.
+\item ``dcbtstls'': Data cache block touch for store and lock set.
+\item ``icbtls'': Instruction cache block touch and lock set.
+\item ``dcblc/icblc'': Clear cache block lock in data/instruction cache.
 \end{itemize}
 
-Some Cache Management instructions contain a 4-bit CT field that is used to specify a cache level within a cache hierarchy or a portion of a cache structure to which the instruction is to be applied. The correspondence between the CT value specified and the cache level is 0 = primary cache, 2 = secondary cache, with other implementation-dependent  options possible.
+Some of the aforementioned cache management instructions contain a 4-bit CT field that is used to specify a cache level within a cache hierarchy or a portion of a cache structure to which the instruction is to be applied. The correspondence between the CT value specified and the cache level is 0 = primary cache, 2 = secondary cache, with other implementation-dependent  options possible.
 
 \subsection{Embedded Architectures}
 \subsubsection{TI TMS320C6000 / VelociTI}
@@ -330,7 +336,7 @@ Flags cache lines with an ``MBPT'' bit in page table, then applies that marking 
 Provides a per-core LookUp Table for mapping which addresses map to which memory space (i.e. shared DRAM, private DRAM)~\cite{clauss2011evaluation}.
 \item [Rigel:] Rigel LPI supports cache management instructions, explicit software-controlled flushes at the granularity of both the line and the entire cache, memory operations that bypass local caches, and prefetch instructions~\cite{kelm-isca09}.
 \item [VLS:] Allocation of virtual local store regions via control registers~\cite{Cook:EECS-2009-131}.
-\item[Conditional Kill]: Modifies the LRU position of block or evicts when a condition is met. A cache line kill state is updated only if an access generated by the kill instruction satisfies the cache line offset condition~\cite{jain-iccad01}.
+\item[Conditional Kill:] Modifies the LRU position of block or evicts when a condition is met. A cache line kill state is updated only if an access generated by the kill instruction satisfies the cache line offset condition~\cite{jain-iccad01}.
 \end{description}
 
 \section{Future Directions}
@@ -343,9 +349,9 @@ For example, one possibility would be to evaluate the benefit conferred by the s
 with respect to memory regions:
 What granularity provides the most benefit for the least overhead?
 
-A different direction would be to explore software managed cache coherence.
+A different direction would be to explore software-managed cache coherence.
 Coherence between un-synchronized memory accesses is a useless property to provide programmers, because the unpredictable behaviors
-of data races are untenable, even if all the possible runtime behaviors are well defined.
+of data races are often untenable to them, even if all the possible runtime behaviors are well defined.
 By identifying synchronized operations and only providing coherence for their target addresses, perhaps the amount of effort
 expended by the hardware can be reduced.
 Such an approach demands a specification for software interaction with some enhanced cache coherence protocol.
@@ -371,4 +377,4 @@ Past HPC and embedded architectures have focused on these sorts of capabilities 
 Going forward, I expect that
 introducing heterogeneity into the memory hierarchy by allowing programmers to opt in to
 when and where they explicity control data movement will be highly effective at
-reducing overall energy per opertation.
+reducing overall energy per operation.
