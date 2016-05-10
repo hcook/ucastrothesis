@@ -904,7 +904,8 @@ TileLink channel bundles that are the outputs of many of the inteface's methods.
 In this section we will discuss the interplay between Context-Dependent Environments (CDEs),
 which we introduced in Chapter~\ref{c.parameters},
 and the CoherencePolicy and Metadata objects.
-CoherencePolicy objects are parameterized by the DirectoryRepresentation that they use.
+CoherencePolicy objects are parameterized by the DirectoryRepresentation that they use,
+as well as their data block size.
 More complicated policies could potentially be additionally parameterized in order to tune their heuristic behavior.
 Metadata objects are parameterized by the TileLinkParameters objects of the TileLink network with which they are associated.
 Figure~\ref{fig:cdepolicy} illustrates these relationships using an L2CacheBank as an examples

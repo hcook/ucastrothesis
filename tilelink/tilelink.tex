@@ -188,7 +188,7 @@ The channels are:
 \begin{description}
 \item[Acquire.] Initiates a transaction to acquire access to a cache block with proper permissions. Also used to write data without caching it locally.
 \item[Probe.] Queries a client to determine whether it has a cache block or revoke its permissions on that cache block.
-\item[Release.] Acknowledges probe receipt, releasing permissions on the line along with any dirty data. Also used to voluntarily write back dirty data.
+\item[Release.] Acknowledges probe receipt, releasing permissions on the block along with any dirty data. Also used to voluntarily write back dirty data.
 \item[Grant.] Provides data or permissions to the original requestor, granting access to the cache block. Also used to acknowledge voluntary Releases.
 \item[Finish.] Final acknowledgment of transaction completion from requestor, used for transaction serialization.
 \end{description}
@@ -262,7 +262,7 @@ If the manager is capable of tracking which clients have copies of the block usi
 \includegraphics[width=0.5\columnwidth]{tilelink/figures/volwb.pdf}
 \caption[Transaction flow to Release permissions on a cache block.]{
 Overview of the transaction flow whereby a client voluntarily releases permissions on a cache block,
-typically due to evicting the line for capacity reasons.
+typically due to evicting the block for capacity reasons.
 A client sends a Release to a manager, specifying that it is voluntary.
 The manager communicates with backing memory if required.
 The manager acknowledges completion of the transaction using a Grant.
@@ -906,7 +906,7 @@ A QoS layer provided by the underlying physical network implementation could be 
 to guarantee the relative priorities of channels, or to enforce performance targets for certain message types.
 
 Currently, TileLink does expose aspects of the physical network layer in the form of the \code{TLDataBeats} parameter, which
-controls what subset of a cache line can be provided to endpoints of a particular network per clock cycle.
+controls what subset of a cache block can be provided to endpoints of a particular network per clock cycle.
 Current implementations resend the metadata for each beat of data.
 Future work could investigate the energy efficiency tradeoff between providing metadata per beat with no deserialization overhead,
 versus implementations that provide metadata only per block but must serialize/deserialize the block into multiple beats. 
@@ -915,7 +915,7 @@ One of the foundational goals of TileLink is to set no limit to user-defined coh
 its four-hop transaction structure.
 While many protocols can be expressed in this paradigm, there are some major classes of protocol performance optimization that
 utilize different transaction structures.
-One of these exceptions is the concept of ``ownership'', where a particular client with write privileges on a line is delegated by the manager
+One of these exceptions is the concept of ``ownership'', where a particular client with write privileges on a block is delegated by the manager
 to respond to coherence requests on that block.
 Inherent to ownership is the concept of direct, client-to-client data and permissions transfer.
 The challenge of adopting such measures is proving that TileLink will remain hierarchically composable,

@@ -67,11 +67,14 @@ and as we strive to scale it to larger client counts involving multiple sockets,
 
 The metadata objects that encapsulate the coherence policy are designed to be easily extensible with
 further custom states and custom TileLink messages.
-Currently, they are only parameterized by the format of the directory information held in ManagerMetadata,
-and this might be desirable to add additional ones for protocols with more complicated heuristics.
+Currently, they are only parameterized by the format of the directory information held in ManagerMetadata
+and the cache block size,
+and it might be desirable to add additional parameters for protocols with more complicated heuristics.
 While different realms may employ different coherence policies,
-the existing design assumes only a single policy will ever be used in a particular realm.
+the existing design assumes only a single policy will ever be used in a particular realm,
+and that the block size used in all realms is the same.
 Allowing the policy to be switched at runtime or allowing multiple policies to be deployed at the same time will require the ability to expand the encapsulated state automatically.
+Allowing different realms to use different block sizes will require reasoning out the constraints these parameters will impose on one another and decoupling how hierarchical metdata are stored.
 
 \section{Future Challenges}
 
