@@ -27,84 +27,84 @@
 %%%     docstring       = "This file is the main file for the ucthesis
 %%%                        class, which is intended to meet the requirements
 %%%                        for University of California Ph.D. dissertations.
-%%%			   It is a direct port to LaTeX2e from UCTHESIS
-%%%			   v2.7 by Ethan V. Munson, with no changes other
-%%%			   than those for compatibility.  The major modifictions
-%%%			   are in the font selection commands in the option
-%%%			   files uct1x.clo.
+%%%        It is a direct port to LaTeX2e from UCTHESIS
+%%%        v2.7 by Ethan V. Munson, with no changes other
+%%%        than those for compatibility.  The major modifictions
+%%%        are in the font selection commands in the option
+%%%        files uct1x.clo.
 %%%
-%%%			   UCTHESIS.STY v2.7 is based on the standard
-%%%			   report.sty as modified by Mittelbach and Schopf in
-%%%			   Jan 1992.  The primary differences are (1) the use
-%%%			   of pseudo-double-spacing, except in certain special
+%%%        UCTHESIS.STY v2.7 is based on the standard
+%%%        report.sty as modified by Mittelbach and Schopf in
+%%%        Jan 1992.  The primary differences are (1) the use
+%%%        of pseudo-double-spacing, except in certain special
 %%%                        environments; and (2) the use of a 6 inch line
 %%%                        with 4em paragraph indentation.  It is only
-%%%			   intended for single-sided printing.  Double-sided
-%%%			   printing may be possible, but you're on
-%%%			   your own.
+%%%        intended for single-sided printing.  Double-sided
+%%%        printing may be possible, but you're on
+%%%        your own.
 %%%
 %%%                        I know of no bugs in this implementation,
 %%%                        but would be happy to hear of any problems
 %%%                        that arise with it.
 %%%
-%%%			   Version 2.x fixes a bug in the previous
-%%%			   version of 20 Jun 1988.  The bug was that
-%%%			   "draft" optional mode didn't work because of
-%%%			   problems in handling optional arguments.
+%%%        Version 2.x fixes a bug in the previous
+%%%        version of 20 Jun 1988.  The bug was that
+%%%        "draft" optional mode didn't work because of
+%%%        problems in handling optional arguments.
 %%%                        This file does not seem to work with earlier
 %%%                        versions of LaTeX (pre-Jan 1992).
 %%%
-%%%			   Version 2.3 includes a single-spaced
-%%%			   tabular* environment.
+%%%        Version 2.3 includes a single-spaced
+%%%        tabular* environment.
 %%%
-%%%			   Version 2.4 sets \evensidemargin correctly
-%%%			   for two-sided style.  It also adds new
-%%%			   environments (\smalltabular and
-%%%			   \scriptsizetabular) which produce tables
-%%%			   with smaller fonts.  The obvious methods
-%%%			   of producing small-font tables don't work
-%%%			   in ucthesis style.
+%%%        Version 2.4 sets \evensidemargin correctly
+%%%        for two-sided style.  It also adds new
+%%%        environments (\smalltabular and
+%%%        \scriptsizetabular) which produce tables
+%%%        with smaller fonts.  The obvious methods
+%%%        of producing small-font tables don't work
+%%%        in ucthesis style.
 %%%
-%%%			   Version 2.5 adds support for the \maketitle
-%%%			   macro.
+%%%        Version 2.5 adds support for the \maketitle
+%%%        macro.
 %%%
-%%%			   Version 2.6 adds support for complete and
-%%%			   correct front matter.  Some dead code was
-%%%			   removed, too.
+%%%        Version 2.6 adds support for complete and
+%%%        correct front matter.  Some dead code was
+%%%        removed, too.
 %%%
 %%%                        Version 2.7 adds front matter support for
 %%%                        thesis committees of more than 3 people
 %%%                        and for a labeled signature line on the
 %%%                        abstract page.
 %%%
-%%%			   Version 3.0 is a direct port of version 2.7
-%%%			   to LaTeX2e.  The major revisions in ucthesis.cls
-%%%			   are converting option processing to LaTeX2e
-%%%			   conventions.  The uct1x files have been revised
-%%%			   to use the new font selection commands.
+%%%        Version 3.0 is a direct port of version 2.7
+%%%        to LaTeX2e.  The major revisions in ucthesis.cls
+%%%        are converting option processing to LaTeX2e
+%%%        conventions.  The uct1x files have been revised
+%%%        to use the new font selection commands.
 %%%
-%%%			   Version 3.1 makes the following changes:
-%%%				``U of C at CAMPUS'' is now ``U of C, CAMPUS''
-%%%				new degreesemester variable
-%%%				roman numeral frontmatter begins with page i,
-%%%					not iii
-%%%				``acknowledgments'' not ``acknowledgements''
+%%%        Version 3.1 makes the following changes:
+%%%       ``U of C at CAMPUS'' is now ``U of C, CAMPUS''
+%%%       new degreesemester variable
+%%%       roman numeral frontmatter begins with page i,
+%%%         not iii
+%%%       ``acknowledgments'' not ``acknowledgements''
 %%%
-%%%			   Version 3.2 explicitly states the license as LPPL.
+%%%        Version 3.2 explicitly states the license as LPPL.
 %%%
-%%%			   Some users have had problems with the
-%%%			   margins ending up too small on one side.
-%%%			   This appears to be a DVI-to-PostScript
-%%%			   driver or printer-adjustment problem.
-%%%			   If you have such trouble, make small adjustments
-%%%			   to the \textwidth and \oddsidemargin
-%%%			   settings in your document preamble.
+%%%        Some users have had problems with the
+%%%        margins ending up too small on one side.
+%%%        This appears to be a DVI-to-PostScript
+%%%        driver or printer-adjustment problem.
+%%%        If you have such trouble, make small adjustments
+%%%        to the \textwidth and \oddsidemargin
+%%%        settings in your document preamble.
 %%%
-%%%			   Another problem some people have had is
-%%%			   that you can't use \pagestyle{headings}
-%%%			   and \markboth if you use \part.  The solution
-%%%			   is to get the headerfooter style, which is
-%%%			   nice and simple to use."
+%%%        Another problem some people have had is
+%%%        that you can't use \pagestyle{headings}
+%%%        and \markboth if you use \part.  The solution
+%%%        is to get the headerfooter style, which is
+%%%        nice and simple to use."
 %%%  }
 %%% ====================================================================
 
@@ -186,8 +186,8 @@
 %
 % \overfullrule = 0pt             % Default is don't mark overfull hboxes.
 \ifnum \@draftmark = 1
-\ssp				  % Single-spaces and
-\overfullrule 5pt		  % causes overfull hboxes to be marked.
+\ssp          % Single-spaces and
+\overfullrule 5pt     % causes overfull hboxes to be marked.
 \fi
 
 
@@ -272,7 +272,6 @@
 
 % The name of your committee's chair
 \def\chair#1{\gdef\@chair{#1}}
-\def\chairb#1{\gdef\@chairb{#1}}
 
 % The names of your other committe members, one per line
 \def\othermembers#1{\gdef\@othermembers{#1}}
@@ -352,9 +351,9 @@
 \vspace{6ex}
 \begin{center}
 \fmsmallfont
-  Committee in charge: \\
+  Committee in charge: \par
+\bigskip \medskip
 {\@chair}, Chair \\
-%{\@chairb}, Co-chair \\
 {\@othermembers} \\
   \bigskip \bigskip \bigskip
   {\@degreesemester \ \@degreeyear}
@@ -384,11 +383,10 @@
 \vspace{.25in}
 \begin{center}
 \vspace{\@approvalspace}
-$\:\overline{~~~~ \mbox{\rule{0in}{0.16in}\small Co-chair%
-\hspace{2.97in} Date }}\:$ \\
+$\:\overline{~~~~ \mbox{\rule{0in}{0.16in}\small Chair%
+\hspace{3.15in} Date }}\:$ \\
 \vspace{\@approvalspace}
-$\:\overline{~~~~ \mbox{\rule{0in}{0.16in}\small Co-chair%
-\hspace{2.97in} Date }}\:$ \\
+$\:\overline{~~~~ \mbox{\rule{0in}{0.16in}\small ~\hspace{3.5in} Date }}\:$ \\
 \vspace{\@approvalspace}
 $\:\overline{~~~~ \mbox{\rule{0in}{0.16in}\small ~\hspace{3.5in} Date }}\:$ \\
 \vspace{\@approvalspace}
@@ -456,35 +454,12 @@ by\par
 \vspace{3ex}
 University of California, {\@campus}\par
 \vspace{3ex}
-{\@chair}, Chair\\
-} %{\@chairb}, Co-chair}
+{\@chair}, Chair}
 \vspace{3ex}
 \end{center}}
 
 \def\endabstract{\par\vfil\null\end{alwayssingle}
 }
-
-\def\abstractsignature{
-\hspace*{\fill}
-\begin{minipage}[t]{3.25in}
-\addtolength{\baselineskip}{-.5\baselineskip}
-\vspace{1.7cm}
-\rule{3.2in}{.5pt}\\
-\@chair\\
-Dissertation Committee Chair
-\vspace{-0.3cm}
-\end{minipage}}
-
-\def\abstractsignatureb{
-\hspace*{\fill}
-\begin{minipage}[t]{3.25in}
-\addtolength{\baselineskip}{-.5\baselineskip}
-\vspace{1.7cm}
-\rule{3.2in}{.5pt}\\
-\@chairb\\
-Dissertation Committee Co-Chair
-\vspace{-0.3cm}
-\end{minipage}}
 
 % DEDICATION
 %
@@ -1086,10 +1061,10 @@ Dissertation Committee Co-Chair
 % 15 Nov 93: further changes to support captions BEFORE the figure
 % or table.  Changes suggested by Donald Arseneau, installed by Ethan
 % Munson.  Detailed reasons are:
-%	The \unhbox allows \vadjust material (\vspace) to get out;
-%	the \vbox to\topskip{} is for captions at the top of top-floats;
-%	the \ifdim is for captions above the figure or table;
-%	the strut is for tables below the caption.
+% The \unhbox allows \vadjust material (\vspace) to get out;
+% the \vbox to\topskip{} is for captions at the top of top-floats;
+% the \ifdim is for captions above the figure or table;
+% the strut is for tables below the caption.
 
 \long\def\@makecaption#1#2{% Add space only if something is ...
    \par\ifdim\prevdepth>-\p@ \vskip 10\p@\relax \fi % above the caption
@@ -1248,9 +1223,9 @@ Dissertation Committee Co-Chair
 % Definition of 'plain' page style.
 %
 \def\ps@plain{\let\@mkboth\markboth
-\def\@oddfoot{}\def\@evenfoot{}				% no feet
-\def\@oddhead{\hbox{}\hfil\rmfamily\thepage}		% heading (right)
-\def\@evenhead{\rmfamily\thepage\hfil\hbox{}}}		% heading (left)
+\def\@oddfoot{}\def\@evenfoot{}       % no feet
+\def\@oddhead{\hbox{}\hfil\rmfamily\thepage}    % heading (right)
+\def\@evenhead{\rmfamily\thepage\hfil\hbox{}}}    % heading (left)
 
 
 

@@ -133,7 +133,7 @@ In a system with hardware-managed cache coherence, the cache controllers and mem
 communicate among themselves according to some protocol to maintain coherence.
 While they might have vastly different implementations, 
 all such protocols maintain coherence by ensuring the same {\em single-writer, multiple-reader} (SWMR) invariant \cite{sorin2011primer}. 
-For a given block of cached memory, at any given moment in time, there is either: 
+For a given block of cached memory, at any given {\em moment in logical time}, there is either: 
 (1) a single core that may write (or read) the block, or 
 (2) there are zero or more cores that may read the block.
 Violating this invariant could lead to values stored out by one core never becoming visible to other cores.

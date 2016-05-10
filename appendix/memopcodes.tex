@@ -33,7 +33,8 @@ M\_FLUSH    & b10000 & write back dirty data & --RW \\ \hline
 M\_PRODUCE  & b10001 & write back dirty data & --W \\ \hline 
 M\_CLEAN    & b10011 & write back dirty data  & \\ \hline
 \end{tabular}
-\caption{Operations expressible via the \code{op\_code} field of Acquire transactions,
+\caption[The \code{op\_code} field of Acquire transactions.]{
+Operations expressible via the \code{op\_code} field of Acquire transactions,
 and their effect on the coherence policy permissions.}
 \label{tab:opcodes}
 \end{table}
@@ -51,7 +52,8 @@ MT\_BU & b100 & byte unsigned \\ \hline
 MT\_HU & b101 & half unsigned \\ \hline
 MT\_WU & b110 & word unsigned \\ \hline
 \end{tabular}
-\caption{Operation sizes expressible via the \code{op\_size} field of Acquire transactions,
+\caption[The \code{op\_size} field of Acquire transactions.]{
+Operation sizes expressible via the \code{op\_size} field of Acquire transactions,
 for atomic memory operations and sub-block loads.}
 \label{tab:opsizes}
 \end{table}
@@ -117,7 +119,8 @@ Cached \\
 \cline{1-7}
 \end{tabular}
 \end{center}
-\caption{Proposed memory opcode encodings for Acquire and Probe messages.
+\caption[Proposal for new opcode encodings.]{
+Proposed memory opcode encodings for Acquire and Probe messages.
 There are four major op codes, and then fields to express whether write permissions are being
 acquired or released (w), whether intermediate cache may allocate copies (a), and custom user-defined operations (u).}
 \label{tab:memopformats}

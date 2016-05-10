@@ -950,7 +950,7 @@ new sub-flows to be initiated based on information taken from the previous sub-f
 that happened in the other realm.
 Doing so requires a translation between inner and outer realms,
 which we facilitate via memory operation codes and the
-coherence metadata object methods previously discussed in this chapter.
+metadata object methods previously discussed in this chapter.
 
 A set of pre-defined memory opcodes
 form an interface through which different policies in our protocol family can communicate.
@@ -1051,30 +1051,32 @@ Table~\ref{tab:loc} provides a breakdown of the number of lines of Chisel code u
 each type of component in the complete protocol implementation.
 The critical point is that individual policies can be easily understood by a developer;
 they fit on a single screen!
+Overall, the entire memory generator, including cache storage arrays, networks and converters,
+is expressed in less than 4000 lines of Chisel code.
 
 \begin{table}[t] 
 \begin{center}
 \begin{tabular}{|l|r|} 
 \hline
-Policy common & 110 \\ \hline
-per Policy & 85, 95, 112, 114, 143 \\ \hline
-per DirRep & 10 \\ \hline \hline
+Task & Lines of code \\ \hline \hline
+Policy (common) & 110 \\ \hline
+Policy (individual) & 85, 95, 112, 114, 143 \\ \hline
+DirRep (individual) & 10, 10 \\ \hline \hline
 TileLink channels & 951 \\ \hline \hline
 TileLink traits & 531 \\ \hline
 Cache traits & 149 \\ \hline \hline
 Cache trackers & 351 \\ \hline
 Broadcast trackers & 126 \\ \hline
 Bufferless trackers & 67 \\ \hline \hline
-Total & 3534\\ \hline
+Total & 3554\\ \hline
 \end{tabular}
-\caption{Overview of the lines of Chisel code used to express features of the
-coherence protocol implementation in the Rocket Chip Generator.}
+\caption[Breakdown of the reuse in Chisel source code.]{Breakdown of the lines of Chisel code used to express features of the
+coherence protocol implementation in the Rocket Chip Generator,
+including portions that are reused across different implementations.}
 \label{tab:loc}
 \end{center}
 \end{table}
 
-Overall the entire memory generator, including cache storage arrays, networks and converters,
-is expressed in less than AA lines of Chisel code.
 
 %Performance measurements, holding design parameters constant (other than core count?).
 %Figure~\ref{} shows MI vs MEI for read-only data.
@@ -1133,11 +1135,12 @@ This factoring allows the implementation of the cache controller logic
 to be changed without requiring changes to the policy description or network implementation.
 
 Taken together, we can see how the trade-offs in information available within each abstraction
-help to make protocol design more productive and tractable.
+help to make protocol design more productive.
 By separating information about timing from policy decisions, policy designers only have to consider
-current state and desired operation, yet know what general type of message need be produced.
-By eliding information about policy from the networking substrate, NoC designers know what priority channels to provision, without focusing on the details of any one policy.
-Agent control logic implementations use both abstractions to simplify their code density and increase code reuse, and
+current state and desired operation, yet know what general type of message needs be produced.
+By eliding information about policy from the networking substrate, NoC designers know what priority channels to provision
+to support any compatible policy.
+Agent implementations use both abstractions to simplify their code density and increase code reuse, and
 both abstractions provide structure to the high-level, global message flows that can be productively verified.
 
 \section{Future Work}
