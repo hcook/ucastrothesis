@@ -918,11 +918,13 @@ utilize different transaction structures.
 One of these exceptions is the concept of ``ownership'', where a particular client with write privileges on a block is delegated by the manager
 to respond to coherence requests on that block.
 Inherent to ownership is the concept of direct, client-to-client data and permissions transfer.
+Along similar lines, so far only invalidation-based protocols have been expressed using the TileLink framework, and it is an open question whether update-based protocols could be handled with the same infrastructure.
+Probe messages would have to be augemented to carry data as well.
 The challenge of adopting such measures is proving that TileLink will remain hierarchically composable,
 which is trivially the case for such transfers among clients within a particular realm,
 but may be more difficult to extend to cross-realm transactions.
 
-Addressing the ownership question is related to another area of future work:
+Addressing the ownership question has bearing on another area of future work:
 The applicability of TileLink to multi-chip coherent shared memory designs.
 While all extant implementations provide coherence over on-chip networks in on-chip memory hierarchies,
 there is no fundamental reason why TileLink could not be applied to multi-chip shared memory designs.
@@ -944,6 +946,7 @@ Plans are already underway to provide converters to RapidIO bus architectures as
 One remaining challenge is to see where support can be added for conversions between TileLink's user-defined, custom coherence states and message types and other coherence protocols,
 such as ARM's AXI-based ACE or IBM's CAPI.
 TileLink's use of the memory opcodes, discussed in Appendix~\ref{a.memopcodes}, may provide the key to inter-protocol conversions of this sort.
+Future revisions of the TileLink specification will attempt to better incorporate the memory opcode into different channels so as to more efficiently express sub-block accesses.
 
 Finally, we are working to develop a complete formal specification of the TileLink interface.
 Our current approach uses logical clocks to define the manager/client interface in terms of composable transducers.

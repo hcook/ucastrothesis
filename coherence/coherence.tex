@@ -78,7 +78,7 @@ The following approaches each offer a Domain Specific Language (DSL)
 built around an abstraction of state machines that perform certain actions when certain conditions are met.
 This conditional execution model is a good fit for the requirements of a coherent cache controller,
 which must update metadata and data based on a series of messages it sends and receives.
-Each high-level description is used to drive the creation of implementations (synthetizable hardware or simulator code),
+Each high-level description is used to drive the creation of implementations (hardware or simulator code),
 as well as correctness (verification rules or documentation) from the same source.
 
 Teapot \cite{chandra-dsl97, chandra-sigplan96}
@@ -201,7 +201,7 @@ For all of the above reasons, O'Leary et al. proposed that it is best to represe
 \cite{oleary-fmcad09}.
 Figure~\ref{fig:acq-flow} shows a more complicated flow that involves acquiring write permissions on a block that is currently being
 shared by multiple clients, again using a 5-step TileLink transaction.
-Figure~\ref{fig:outer-acq-flow} shows annother example flow, one that involves acquiring read permissions on a block that the manager does not possess, forcing it to forward the query to an outer realm.
+Figure~\ref{fig:outer-acq-flow} shows another example flow, one that involves acquiring read permissions on a block that the manager does not possess, forcing it to forward the query to an outer realm.
 
 An important part of verifying protocols using flows is to specify rules that govern non-interference between flows,
 i.e., which flows are allowed to execute in the system at the same time.

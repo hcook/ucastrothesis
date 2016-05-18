@@ -25,7 +25,7 @@ A {\em parameterization paradigm} codifies a particular way of expressing parame
 as well as mechanisms to constrain their valuations.
 
 The parameters and their constraints become the interface through which the generator author and the system architect communicate.
-Constrained parameters serve as boundaries that define the space of designs which it is possible for the architect to explore.
+Constrained parameters serve as boundaries that define the space of designs it is possible for the architect to explore.
 By searching over the top-level parameters exposed by a set of such generators, System-on-Chip (SoC) chip architects can explore tradeoffs between performance, area, and energy efficiency.
 By recording the outcomes of these explorations, these designers can build up a map of how to customize pieces of their design for a particular application's requirements.
 
@@ -498,7 +498,7 @@ While the SystemVerilog language includes associative arrays (similar to HashMap
 This type of environment could be implemented in Bluespec or SystemVerilog using tagged unions or associative arrays.
 Unfortunately, neither language supports dynamically typed parameters, and thus cannot pass associative arrays as parameter objects.
 Bluespec requires that all type checking be resolved prior to elaboration; since the compiler cannot guarantee that the returned value is type safe, associative arrays are not supported. 
-Tagged unions, however, can be statically-type safe and used if the types of all parameters are known.
+Tagged unions, however, can be safely used if the types of all parameters are statically known.
 While both BluespecSV and SystemVerilog claim support for tagged unions, many SystemVerilog compilers lack support for them.
 
 Chisel and Genesis2 leverage Scala and Perl, respectively, for metaprogramming the module hierarchy generation stage of hardware elaboration.

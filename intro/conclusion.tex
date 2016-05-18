@@ -64,6 +64,8 @@ from being able to adopt protocols with performance optimizations based around m
 TileLink has so far only been deployed within relatively small on-chip memory hierarchies,
 and as we strive to scale it to larger client counts involving multiple sockets,
  we expect some of these concerns to begin to manifest. 
+So far, only invalidation-based protocols have been expressed using the TileLink framework,
+and it is an open question whether update-based protocols could be handled within the same infrastructure.
 
 The metadata objects that encapsulate the coherence policy are designed to be easily extensible with
 further custom states and custom TileLink messages.
@@ -138,9 +140,12 @@ I hope that our open source frameworks will prove themselves valuable to memory 
 \section{Final Remarks}
 
 In this brave new power-constrained, post-Dennard world, energy efficiency has become a first-order design goal.
-As Moore's law falters, companies will have to improve the energy/operation of their designs
+As Moore's law falters, companies will have to iteratively reduce the energy consumed by each operation of their designs
 while working with the same transistor resources.
-This trend has already become manifest in the embedded and mobile device industry via the adoption of SoC designs, which boast an ever increasing number of specialized co-processors on each chip, and it seems clear that heterogenous clouds of specialized processors cannot be far behind.
+This trend towards specialization has already become manifest in the embedded and mobile device industry via the adoption of
+System-on-Chip designs, which boast an ever increasing number of application-specific co-processors on each chip.
+It seems clear to me that heterogeneous clouds comprising collections of application-specific processors cannot be far behind.
+
 Moving beyond specialized cores, energy consumption within the memory hierarchy is rapidly becoming a significant design concern.
 The high cost associated with communication thereby increases the value of managing the memory hierarchy well.
 The majority of the data movement activity that occurs within a multicore chip's on-chip memory hierarchy is done automatically at the behest of the cache controllers and the coherence policy that governs their behaviors.
@@ -150,13 +155,13 @@ implement the associated protocols efficiently is an important design challenge 
 Designing new cache coherence protocols or supporting a wider variety of more complicated protocols is not a task hardware engineers can undertake lightly.
 Verifying the correctness of a cache coherence protocol is a challenging task, and
 verifying that a correct protocol has been implemented correctly is even more difficult.
-Unfortuntately, the semantic gap between verifiable, high-level abstract descriptions of protocols and 
+The semantic gap between verifiable, high-level abstract descriptions of protocols and 
 concrete HDL implementations of those same protocols is so wide that verifying the correctness of the protocol
 does not come close to guaranteeing the correctness of the final implementation.
 As I have shown, improving the capabilities of hardware description languages offers us a way to lighten this burden:
 By raising the level of abstraction at which cache controller logic can be described and at which synthesizable designs can be generated,
 we can smooth over the gap between protocol specification and implementation.
-In doing so, we can make cache coherence protocol selection another knob in the toolbox of a hardware designer focused on exploring a space of heterogenous hardware designs.
+In doing so, we can make cache coherence protocol selection another knob in the toolbox of a hardware designer focused on exploring a space of heterogeneous hardware designs.
 
 The design productivity crisis created by the demands of energy-efficient, post-Dennard SoC design has implications that reach beyond
 languages and tools to methodology itself.
@@ -172,6 +177,7 @@ Emphasizing a sequence of prototypes by building generators over design instance
 since early hardware prototypes run orders of magnitude faster than simulators.
 As we iteratively add features to the generator, we can retarget our efforts to adapt to performance and energy feedback from the previous iteration.
 By parameterizing the design generator, we can smoothly scale the size of its output from test chip to final product without rewriting any hardware modules.
+In the three lineages of chips that we constructed over the course of my thesis, I was able to iteratively add features to the memory hierarchy as we scaled it up in size and complexity.
 This thesis thereby serves as a case study in leveraging lessons learned from the software world by
 applying aspects of the software agile development model to hardware design,
 and particularly, coherent memory hierarchy design.
